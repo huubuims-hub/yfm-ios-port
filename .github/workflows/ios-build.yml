@@ -1,0 +1,96 @@
+# iOS (EXPERIMENTAL, notes/ios-port.md): builds the translated ARM64 game
+# against the iPhoneOS SDK on a macOS runner and packs an .ipa to sideload.
+# It never needs a disc or any secret. Every step's log is uploaded, pass or
+# fail, so a failed run still tells what to fix next.
+name: iOS build (experimental)
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: "How far to go"
+        type: choice
+        default: full
+        options:
+          - deps-only      # build SDL3, FreeType, libpng, zlib, zstd for iOS
+          - compile-only   # also compile every game unit (full error list)
+          - full           # link and package the .ipa
+
+jobs:
+  ios:
+    name: ios-arm64 (macos-15)
+    runs-on: macos-15
+    timeout-minutes: 150
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            tmp/pc/llvm-macos
+            tmp/pc/tools/macos
+            tmp/pc/macos-deps/src
+            tmp/pc/ios-deps
+          key: ios-arm64-llvm21.1.8-${{ hashFiles('tools/pc/macos_toolchain.json', 'tools/pc/ios_deps.py', 'tools/pc/macos_deps.py', 'tools/pc/dependency_archives.py', 'tools/pc/fetch_tools.py') }}
+      - name: Toolchain facts
+        run: |
+          mkdir -p tmp/ios-logs
+          { xcodebuild -version; xcrun --sdk iphoneos --show-sdk-path; xcrun --sdk iphoneos --show-sdk-version; sw_vers; } 2>&1 | tee tmp/ios-logs/toolchain.txt
+      - name: Build iOS dependencies (SDL3, FreeType, libpng, zlib, zstd)
+        run: |
+          cd tools/pc
+          python -c "import ios_deps; print(ios_deps.ensure(jobs=4))" 2>&1 | tee ../../tmp/ios-logs/deps.log
+      - name: Compile the game for iOS
+        if: inputs.stage != 'deps-only'
+        continue-on-error: true
+        id: compile
+        run: |
+          set -o pipefail
+          extra=""
+          if [ "${{ inputs.stage }}" = "compile-only" ]; then extra="--compile-only"; fi
+          MEMORIES_VERSION="dev-${GITHUB_SHA:0:12}" python tools/pc/build.py --target ios-arm64-translated --release $extra 2>&1 | tee tmp/ios-logs/build.log
+      - name: Package the .ipa
+        if: inputs.stage == 'full' && steps.compile.outcome == 'success'
+        run: python3 tools/pc/package_ios.py --version "dev-${GITHUB_SHA:0:12}" 2>&1 | tee tmp/ios-logs/package.log
+      - name: Collect the build's own logs
+        if: always()
+        run: |
+          mkdir -p tmp/ios-logs/units
+          if [ -d tmp/pc/ios-arm64-translated/logs ]; then
+            find tmp/pc/ios-arm64-translated/logs -type f -size +0c | head -400 | while read f; do
+              cp "$f" "tmp/ios-logs/units/$(echo "$f" | tr '/' '_')"
+            done
+          fi
+          # One file with the first lines of every failed unit's log.
+          for f in tmp/ios-logs/units/*; do
+            [ -f "$f" ] && { echo "=== $f"; head -n 25 "$f"; }
+          done > tmp/ios-logs/ERRORS-SUMMARY.txt 2>/dev/null || true
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-logs
+          path: tmp/ios-logs
+          retention-days: 14
+      - name: Upload the .ipa
+        if: inputs.stage == 'full' && steps.compile.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: yfm-redecomp-ios-arm64-ipa
+          path: |
+            tmp/pc-release/ios-arm64/*.ipa
+            tmp/pc-release/ios-arm64/*.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - name: Fail the run if the compile failed
+        if: steps.compile.outcome == 'failure'
+        run: |
+          echo "The iOS compile failed: download the ios-logs artifact (ERRORS-SUMMARY.txt first)."
+          exit 1
