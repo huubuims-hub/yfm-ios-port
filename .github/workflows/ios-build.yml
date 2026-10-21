@@ -74,6 +74,11 @@ jobs:
             echo "##### Error messages, most frequent first"
             cat tmp/ios-logs/units/* tmp/ios-logs/build.log 2>/dev/null | grep -h "error:" | sed -E 's/^[^ ]*: error: //' | sort | uniq -c | sort -rn | head -40
             echo
+            echo "##### Linker log (first 80 lines)"
+            for f in tmp/ios-logs/units/*link.log; do
+              [ -f "$f" ] && head -n 80 "$f"
+            done
+            echo
             echo "##### Per unit"
             for f in tmp/ios-logs/units/*; do
               [ -f "$f" ] || continue

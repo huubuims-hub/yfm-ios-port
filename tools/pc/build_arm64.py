@@ -627,7 +627,7 @@ MACOS_FRAMEWORKS = (
 IOS_FRAMEWORKS = (
     "UIKit Foundation CoreGraphics CoreVideo CoreAudio AudioToolbox Metal QuartzCore "
     "GameController UniformTypeIdentifiers CoreMedia AVFoundation OpenGLES CoreText "
-    "CoreHaptics CoreMotion ImageIO MobileCoreServices"
+    "CoreHaptics CoreMotion CoreBluetooth ImageIO MobileCoreServices"
 ).split()
 
 
