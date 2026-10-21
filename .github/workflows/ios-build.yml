@@ -68,10 +68,21 @@ jobs:
               cp "$f" "tmp/ios-logs/units/$(echo "$f" | tr '/' '_')"
             done
           fi
-          # One file with the first lines of every failed unit's log.
-          for f in tmp/ios-logs/units/*; do
-            [ -f "$f" ] && { echo "=== $f"; head -n 25 "$f"; }
-          done > tmp/ios-logs/ERRORS-SUMMARY.txt 2>/dev/null || true
+          # ERRORS-SUMMARY.txt: first the error messages counted across all units
+          # (the likeliest root causes on top), then each failed unit's first errors.
+          {
+            echo "##### Error messages, most frequent first"
+            cat tmp/ios-logs/units/* tmp/ios-logs/build.log 2>/dev/null | grep -h "error:" | sed -E 's/^[^ ]*: error: //' | sort | uniq -c | sort -rn | head -40
+            echo
+            echo "##### Per unit"
+            for f in tmp/ios-logs/units/*; do
+              [ -f "$f" ] || continue
+              n=$(grep -c "error:" "$f" || true)
+              [ "$n" -gt 0 ] || continue
+              echo "=== $f ($n errors)"
+              grep -m 12 -A2 "error:" "$f"
+            done
+          } > tmp/ios-logs/ERRORS-SUMMARY.txt 2>/dev/null || true
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

@@ -60,7 +60,7 @@
 #else
 #define HERE(name) name
 #endif
-#include <SDL3/SDL_opengl.h>
+#include "pc/render/gl_headers.h"
 #include "pc/render/gl_picture.h"
 #include "pc/render/texture_pack.h"
 #include "pc/compat/signal.h"
@@ -126,7 +126,7 @@ static int pointer_x, pointer_y, pointer_inside, cursor_hidden;
 /* The pointer's place is a mouse's (it hovers): the mouse events SDL makes
  * of a touch move it only while the finger is down, and leave it where the
  * finger lifted, so they never reveal the bar by hovering. */
-#ifdef SDL_PLATFORM_ANDROID
+#if defined(SDL_PLATFORM_ANDROID) || defined(MEMORIES_IOS)
 static int pointer_is_mouse;
 #else
 static int pointer_is_mouse = 1;
@@ -280,7 +280,7 @@ static void resize_mods(int w, int h)
 }
 int HERE(Platform_OpenFolder)(const char *path)
 {
-#ifdef SDL_PLATFORM_ANDROID
+#if defined(SDL_PLATFORM_ANDROID) || defined(MEMORIES_IOS)
     /* An app has no file manager window to open: SDL_OpenURL there takes a
      * URI for an activity, and a plain path opens nothing. */
     (void)path;
@@ -428,7 +428,7 @@ void HERE(Platform_OpenControls)(void)
 static int panel_paused, panel_clock_rate, panel_typing;
 static int panel_overlay(void)
 {
-#ifdef SDL_PLATFORM_ANDROID
+#if defined(SDL_PLATFORM_ANDROID) || defined(MEMORIES_IOS)
     return 1;
 #else
     const char *wanted = getenv("MEMORIES_PANELS");
@@ -1461,7 +1461,7 @@ static void upload_overlay(int x, int y, int w, int h)
 static void gl_quad_part(GLuint texture, float x, float y, float w, float h, float s0, float t0, float s1, float t1)
 {
     glBindTexture(GL_TEXTURE_2D, texture);
-#ifdef __APPLE__
+#if defined(__APPLE__) && !defined(MEMORIES_IOS)
     PresentPass_Quad(2 * x / layout.win_w - 1, 1 - 2 * y / layout.win_h,
                      2 * w / layout.win_w, -2 * h / layout.win_h, s0, t0, s1, t1);
 #else
@@ -1606,7 +1606,7 @@ static void show(void)
         int output_w, output_h, effects;
         if (!gl_picture || !gl_overlay || !SDL_GetWindowSizeInPixels(window, &output_w, &output_h)) return;
         glViewport(0, 0, output_w, output_h);
-#ifndef __APPLE__
+#if !defined(__APPLE__) || defined(MEMORIES_IOS)
         glMatrixMode(GL_PROJECTION);
         glLoadIdentity();
         glOrtho(0, layout.win_w, layout.win_h, 0, -1, 1);
@@ -1615,7 +1615,7 @@ static void show(void)
 #endif
         glClearColor(0, 0, 0, 1);
         glClear(GL_COLOR_BUFFER_BIT);
-#ifndef __APPLE__
+#if !defined(__APPLE__) || defined(MEMORIES_IOS)
         glEnable(GL_TEXTURE_2D);
         glColor4f(1, 1, 1, 1);
 #endif
@@ -2231,7 +2231,7 @@ static void create_window(const char *title)
     const char *gles = getenv("MEMORIES_GLES");
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
     update_menu_scale(240 * scale + 26 * Menu_AutoScale(240 * scale));
-#ifdef __APPLE__
+#if defined(__APPLE__) && !defined(MEMORIES_IOS)
     /* The default macOS context is 2.1. Integer textures need 3.2 core,
      * with shader-based presentation instead of immediate-mode quads. */
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);

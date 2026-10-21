@@ -21,6 +21,8 @@ stage 2 has to fix.
 | `src/pc/mods/mods.c` | iOS: a bundled code mod's dylib is loaded from `<app>/Frameworks/<mod id>.dylib` (`ios_library_path`), the one place sideloading tools sign. Mods a player adds can only be data mods. |
 | `src/pc/platform/paths.c` | iOS: the user folder is the app's `Documents` itself (shown by the Files app); `mods/` and `game/` are created on first launch. Read-only resources (languages, shipped mods) stay in the bundle root, which `Paths_ProgramDir()` already returns for a flat `.app`. |
 | `src/pc/platform/game_files.c` | iOS: the disc image is also looked for in `Documents/game` and `Documents`; the "not found" message says to use the Files app. |
+| `src/pc/render/gl_headers.h` | SDL's `SDL_opengl.h` is empty on iOS ("No OpenGL on iOS"); this includes it as though the platform were not iOS so the GL names and function-pointer types the ES 3 path uses (as on Android) exist. Found by the first CI compile (`unknown type name 'GLuint'`). |
+| `src/pc/render/gl_picture.c`, `sdl.c`, `platform_common.c`, `ios.c` | iOS takes the ES 3 / SDL-renderer path like Android: `Platform_HasDesktopGL()` is 0, the macOS core-profile attributes, `#version 150` shaders (the ES rewrite needs `#version 130`) and `PresentPass_Quad` calls are for macOS only; touch-style pointer and overlay panels as on Android. |
 | `.github/workflows/ios-build.yml` | Manual workflow, stages `deps-only` / `compile-only` / `full`; uploads every log. |
 
 ## Mods and the HD pack on iOS

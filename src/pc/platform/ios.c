@@ -11,6 +11,13 @@ typedef int memories_ios_translation_unit_is_not_empty;
 #ifdef MEMORIES_IOS
 #include "platform.h"
 
+/* OpenGL ES only (UIKit has no desktop OpenGL): sdl.c then shows the game
+ * through SDL's renderer in an ES 3.0 context, as on Android. */
+int Platform_HasDesktopGL(void)
+{
+    return 0;
+}
+
 /* An iOS app cannot re-execute itself; callers treat a negative result as
  * "restart failed" and tell the player to reopen the app. */
 int Platform_RestartGame(void)

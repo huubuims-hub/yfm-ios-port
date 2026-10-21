@@ -1,68 +1,70 @@
 # Hướng dẫn từng bước: đưa mã nguồn lên GitHub và build iOS bằng GitHub Actions
 
-> Trạng thái: **chưa từng được build trên máy Mac**. Lần chạy đầu rất có thể báo
-> lỗi. Đó là bình thường: mục tiêu của các lần chạy đầu là lấy ra log lỗi để sửa tiếp.
+> Trạng thái: **chưa từng chạy được trên iPhone**. Các lần build đầu có thể báo
+> lỗi; đó là bình thường vì mục tiêu là lấy log lỗi để sửa tiếp.
 
 Bạn không cần biết lập trình và không cần dùng dòng lệnh. Mọi thứ làm bằng
 chuột với **GitHub Desktop**.
 
 ## Bước 1. Tài khoản GitHub
 
-1. Vào https://github.com, bấm **Sign up**, tạo tài khoản và xác nhận email.
+Vào https://github.com, bấm **Sign up**, tạo tài khoản và xác nhận email.
 
 ## Bước 2. Cài GitHub Desktop
 
-1. Vào https://desktop.github.com, tải và cài **GitHub Desktop**.
-2. Mở lên, bấm **Sign in to GitHub.com**, đăng nhập tài khoản vừa tạo.
+Vào https://desktop.github.com, tải và cài **GitHub Desktop**, mở lên và đăng nhập.
 
 ## Bước 3. Giải nén mã nguồn
 
-1. Giải nén file `yfm-ios-port-ready-to-upload.zip` vào một thư mục **đường dẫn ngắn**,
-   ví dụ `C:\yfm-ios`.
-2. Mở thư mục đó. Bạn phải thấy ngay các thư mục `src`, `tools`, `mods`, `docs`,
-   và thư mục `.github`. Nếu thấy thêm một lớp thư mục bọc ngoài, hãy mở vào lớp trong.
+1. Giải nén file zip vào thư mục **đường dẫn ngắn**, ví dụ `C:\yfm-ios`.
+2. Mở thư mục đó, bạn phải thấy ngay các thư mục `src`, `tools`, `mods`, `docs` và
+   `.github`. Nếu thấy thêm một lớp thư mục bọc ngoài, hãy mở vào lớp trong.
 3. Đừng bỏ file đĩa game `.bin` vào thư mục này.
-4. Bạn **không cần** áp file `.patch`: mã nguồn trong zip này đã có sẵn các thay đổi.
+4. Bạn **không cần** áp file `.patch`: mã nguồn trong zip đã có sẵn các thay đổi.
 
 ## Bước 4. Tạo repo và upload
 
 1. Trong GitHub Desktop: **File > Add local repository...**
 2. Bấm **Choose...** và chọn thư mục `C:\yfm-ios`.
-3. Sẽ hiện thông báo "This directory does not appear to be a Git repository".
-   Bấm liên kết **create a repository**.
-4. Giữ nguyên tên (ví dụ `yfm-ios`), để trống mô tả, bấm **Create repository**.
-5. Cột bên trái hiện khoảng 2900 file đã thay đổi. Ở ô **Summary** bên dưới gõ
-   `Initial commit`, rồi bấm **Commit to main**.
-6. Bấm **Publish repository** (nút xanh ở phía trên).
-7. **Bỏ dấu tích ở ô "Keep this code private"** (repo phải để Public, vì repo
-   private bị tính phút chạy máy Mac nhiều gấp bội). Bấm **Publish repository**.
-8. Chờ upload xong (vài phút).
+3. Khi hiện "This directory does not appear to be a Git repository", bấm liên kết
+   **create a repository**, giữ tên mặc định, bấm **Create repository**.
+4. Ở ô **Summary** gõ `Initial commit`, bấm **Commit to main**.
+5. Bấm **Publish repository**, **bỏ dấu tích "Keep this code private"** (repo phải
+   để Public, vì repo private bị tính phút chạy máy Mac nhiều gấp bội), rồi bấm
+   Publish.
 
 ## Bước 5. Chạy build trên GitHub
 
-1. Vào https://github.com, mở repo `yfm-ios` của bạn, bấm tab **Actions**.
-2. Ở cột trái chọn **iOS build (experimental)**.
-3. Bấm **Run workflow** (nút bên phải). Ở ô **How far to go** chọn **deps-only**,
-   rồi bấm nút xanh **Run workflow**.
-4. Tải lại trang, sẽ thấy một dòng có biểu tượng tròn vàng (đang chạy). Bấm vào đó.
-   Lần đầu mất khoảng 15 đến 40 phút. Biểu tượng xanh là thành công, đỏ là có lỗi.
+1. Vào github.com, mở repo của bạn, chọn tab **Actions**.
+2. Chọn **iOS build (experimental)** ở cột trái.
+3. Bấm **Run workflow**, ở ô **How far to go** chọn một mức, rồi bấm nút xanh:
+   - **deps-only**: dựng thư viện (SDL3, FreeType...) cho iOS.
+   - **compile-only**: biên dịch toàn bộ game và gom tất cả lỗi.
+   - **full**: liên kết và đóng gói `.ipa`.
+4. Tải lại trang và bấm vào dòng đang chạy (tròn vàng). Xanh là thành công, đỏ là lỗi.
 
 ## Bước 6. Lấy log và gửi cho mình
 
-1. Bấm vào dòng run đó, rồi bấm vào mục **ios-arm64 (macos-15)** ở cột trái.
-2. Bước nào có dấu X đỏ, bấm vào để mở rộng, kéo xuống cuối, **chép khoảng 60 dòng
-   cuối** (hoặc chụp màn hình) và gửi cho mình.
-3. Kéo xuống cuối trang tóm tắt run, mục **Artifacts**, tải **ios-logs** nếu có.
+1. Kéo xuống cuối trang run, mục **Artifacts**, tải **ios-logs** và giải nén.
+2. Mở file **ERRORS-SUMMARY.txt**, chép nội dung (hoặc tải lên cuộc trò chuyện) gửi mình.
+3. Nếu không có artifact: bấm vào bước đỏ, kéo xuống cuối và chép khoảng 60 dòng cuối.
 
-Nếu `deps-only` xanh, quay lại Bước 5 và chạy tiếp với **compile-only**, rồi
-**full**. Khi chạy `compile-only`, mở file `ERRORS-SUMMARY.txt` trong `ios-logs`
-và gửi mình nội dung.
+## Cập nhật khi có phiên bản mã nguồn mới (làm sau mỗi vòng sửa lỗi)
+
+Mỗi lần mình gửi bản mới (một file zip), bạn **không cần tạo repo lại**:
+
+1. Giải nén file zip mới **đè lên** thư mục cũ (ví dụ `C:\yfm-ios`), chọn
+   **Replace the files / Thay thế**.
+2. Mở GitHub Desktop. Cột trái hiện các file vừa thay đổi (thường vài chục file).
+3. Gõ một dòng mô tả ở ô **Summary** (ví dụ `Update 3`), bấm **Commit to main**.
+4. Bấm **Push origin** (nút ở thanh trên).
+5. Vào GitHub, tab **Actions**, chạy lại **iOS build (experimental)**.
 
 ## Sau khi có file .ipa (chỉ khi chạy `full` thành công)
 
-Tải artifact `yfm-redecomp-ios-arm64-ipa` ở trang run, giải nén ra file `.ipa`,
-rồi cài lên iPhone bằng **Sideloadly**, **AltStore** hoặc **SideStore** (Apple ID
-miễn phí: app hết hạn sau 7 ngày).
+Tải artifact `yfm-redecomp-ios-arm64-ipa` ở trang run, giải nén ra file `.ipa`, rồi
+cài lên iPhone bằng **Sideloadly**, **AltStore** hoặc **SideStore** (Apple ID miễn
+phí: app hết hạn sau 7 ngày).
 
 ## Đĩa game, mod và gói HD trên iPhone (chưa kiểm chứng)
 

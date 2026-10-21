@@ -329,7 +329,9 @@ void Platform_SetClockRate(int percent)
 int Platform_ClockRate(void) { return rate; }
 
 #ifndef __ANDROID__ /* android.c: GLES only */
+#ifndef MEMORIES_IOS /* ios.c: GLES only */
 int Platform_HasDesktopGL(void) { return 1; }
+#endif
 int Platform_GuestMemoryHelp(char *why, size_t size)
 {
     (void)why;

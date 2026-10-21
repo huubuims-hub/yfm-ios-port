@@ -8,7 +8,7 @@
  * tools/pc/build_arm64.py for --target ios-arm64-translated. */
 #if defined(__ANDROID__) || defined(MEMORIES_IOS)
 #include "present_pass.h"
-#include <SDL3/SDL_opengl.h>
+#include "gl_headers.h"
 
 int PresentPass_InitCore(void) { return 0; }
 
