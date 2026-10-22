@@ -351,6 +351,7 @@ void Settings_Set(SettingId id, int value)
     for (i = 0; i < observer_count; i++) observers[i](id, value);
 }
 
+int Settings_Default(SettingId id) { return id >= 0 && id < SET_COUNT ? info[id].def : 0; }
 const char *Settings_Key(SettingId id) { return id >= 0 && id < SET_COUNT ? info[id].key : NULL; }
 int Settings_Min(SettingId id) { return id >= 0 && id < SET_COUNT ? info[id].min : 0; }
 int Settings_Max(SettingId id) { return id >= 0 && id < SET_COUNT ? info[id].max : 0; }

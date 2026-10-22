@@ -77,3 +77,13 @@ YFM Re-Decomp**. Lần mở đầu app tự tạo thư mục `game` và `mods`.
   (`mod.json` phải nằm ngay trong thư mục đó).
 - Mod code đi kèm (3D Monsters, Hand Camera, AI Hard Mode, Yamyi Mods) nằm sẵn
   trong app. Mod code do bạn tự thêm **không chạy được** trên iOS.
+
+## Nếu app treo vì thiết lập đồ họa quá cao
+
+- Thoát hẳn app (vuốt app lên trong màn hình đa nhiệm) rồi **mở lại**. Nếu lần
+  trước app chưa khởi động xong, game sẽ hỏi có đặt lại thiết lập đồ họa không
+  (Reset graphics / Reset + turn mods off / Keep settings). File thiết lập cũ được
+  giữ là `settings.txt.bak`.
+- Nếu hộp thoại không hiện, cách thủ công: mở **Tệp > Trên iPhone > YFM Re-Decomp**,
+  **xóa file `settings.txt`** (hoặc mở nó và đặt `internal_scale=1`, `msaa=0`),
+  rồi mở lại app.

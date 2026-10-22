@@ -86,6 +86,8 @@ const char *Settings_TakeNewError(void);
 int Settings_Get(SettingId id);
 void Settings_Set(SettingId id, int value);
 const char *Settings_Key(SettingId id);
+/* The value a setting has when the file says nothing about it. */
+int Settings_Default(SettingId id);
 int Settings_Min(SettingId id);
 int Settings_Max(SettingId id);
 void Settings_Observe(void (*changed)(SettingId id, int value));

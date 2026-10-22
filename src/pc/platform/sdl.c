@@ -63,6 +63,7 @@
 #include "pc/render/gl_headers.h"
 #include "pc/render/gl_picture.h"
 #include "pc/render/texture_pack.h"
+#include "recovery.h"
 #include "pc/compat/signal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -2946,6 +2947,7 @@ void HERE(Platform_Frame)(unsigned frame)
 {
     static unsigned composed_then;
     current_frame = frame;
+    Recovery_Frame();
     set_icon();
     Log_Drain();
     if (frame % 120 == 0) {

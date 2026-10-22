@@ -15,6 +15,7 @@
  * its size. */
 #include "menu.h"
 #include "platform.h"
+#include "recovery.h"
 #include "settings.h"
 #include "pc/audio/spu.h"
 #include "pc/audio/replace.h"
@@ -794,6 +795,7 @@ void Menu_LoadSettings(void)
 {
     Paths_MigrateLegacySaves(); /* what older builds left in ./saves */
     Settings_Load();
+    Recovery_AtStart(); /* iOS: asks first if the last start never finished (recovery.h) */
     Spu_SetOutputVolume(Settings_Get(SET_MASTER_VOLUME));
     Spu_SetBusVolume(SPU_BUS_MUSIC, Settings_Get(SET_MUSIC_VOLUME));
     Spu_SetBusVolume(SPU_BUS_SFX, Settings_Get(SET_SFX_VOLUME));
