@@ -31,6 +31,10 @@ int TouchPad_SetMode(int mode);
 /* The window's size, and where below its top the pad may start (the menu
  * bar's height when it shows one). 1 when the layout changed. */
 int TouchPad_Layout(int window_w, int window_h, int top);
+/* How far in from the window's left and right edges the pad stays (a notch,
+ * the Dynamic Island, rounded corners: the safe area, SET_SAFE_AREA). 1 when
+ * the layout changed. */
+int TouchPad_SetInsets(int left, int right);
 /* Window pixels per density-independent pixel (Android's dp; 0 when the
  * system does not say): with it, a button is a thumb's width on any screen,
  * 48 to 80 dp, rather than a share of the window. 1 when the layout

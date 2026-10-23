@@ -1,4 +1,6 @@
-# iOS port (EXPERIMENTAL, stages 1 and 2)
+# iOS port (EXPERIMENTAL)
+
+Based on upstream commit e64b91f9 (2026-10-21, PR #392). Our changes touch 15 existing files and add 9; when updating from upstream, the likeliest conflicts are `sdl.c`, `menu.c`, `settings.c`, `paths.c` and `tools/pc/build_arm64.py`.
 
 Status: **untested**. Nothing here has been built on a Mac yet. Stage 1 only
 adds the build plumbing so that a macOS CI runner can build the iOS
@@ -24,6 +26,7 @@ stage 2 has to fix.
 | `src/pc/render/gl_headers.h` | SDL's `SDL_opengl.h` is empty on iOS ("No OpenGL on iOS"); this includes it as though the platform were not iOS so the GL names and function-pointer types the ES 3 path uses (as on Android) exist. Found by the first CI compile (`unknown type name 'GLuint'`). |
 | `src/pc/render/gl_picture.c`, `sdl.c`, `platform_common.c`, `ios.c` | iOS takes the ES 3 / SDL-renderer path like Android: `Platform_HasDesktopGL()` is 0, the macOS core-profile attributes, `#version 150` shaders (the ES rewrite needs `#version 130`) and `PresentPass_Quad` calls are for macOS only; touch-style pointer and overlay panels as on Android. |
 | `src/pc/platform/recovery.c` (+ `settings.c` `Settings_Default`, `menu.c`, `sdl.c`) | iOS startup recovery: a marker file `startup-check.txt` is written when the settings are applied (and when a graphics setting changes) and removed after 20 s / 120 frames on screen or a normal exit. A marker found at launch (hang, iOS kill, force-quit) asks: reset the graphics settings, also turn the mods off, or keep. The old `settings.txt` is kept as `settings.txt.bak`. Logic tested on Linux with stubs; the dialog itself (SDL_ShowMessageBox on UIKit before SDL_Init) is untested on a device. |
+| `settings.h/.c` `SET_SAFE_AREA` (`safe_area`, default on for iOS), `menu.c` Video > "Avoid the notch (safe area)", `sdl.c` `relayout()`, `touch_pad.c` `TouchPad_SetInsets` | Lays the picture out inside `SDL_GetWindowSafeArea()` across (the panels already did) and keeps the on-screen controller between the same two insets. Without insets the controller layout is identical to upstream's (checked with a Linux harness). The 4:3 picture is narrower than a notch phone's screen, so the notch mostly covered the controller, which sits in the black bars, and the widescreen / stretched picture. Not done: the menu bar and the HUD text near the edges. Untested on a device with a notch. |
 | `.github/workflows/ios-build.yml` | Manual workflow, stages `deps-only` / `compile-only` / `full`; uploads every log. |
 
 ## Mods and the HD pack on iOS

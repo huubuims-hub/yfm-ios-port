@@ -120,8 +120,8 @@ enum { MENU_FILE, MENU_VIDEO, MENU_AUDIO, MENU_GAME, MENU_VIEW, MENU_DEBUG, MENU
 #define HELP_ITEMS 6
 #endif
 enum { SUB_SCALE, SUB_MENU_SIZE, SUB_SPEED, SUB_FPS, SUB_CHEATS, SUB_TRACE, SUB_SCALING, SUB_ASPECT, SUB_RESOLUTION, SUB_COLOR, SUB_EFFECTS, SUB_JUMP, SUB_ANTIALIAS, SUB_FILTER, SUB_RANK, SUB_LANGUAGE, SUB_PGXP, SUB_TOUCH, SUB_ROTATION, SUB_COUNT };
-#ifdef __ANDROID__
-#define VIDEO_ITEMS 15 /* with Screen rotation */
+#if defined(__ANDROID__) || defined(MEMORIES_IOS)
+#define VIDEO_ITEMS 15 /* with Screen rotation, or Avoid the notch */
 #else
 #define VIDEO_ITEMS 14
 #endif
@@ -140,6 +140,9 @@ static Menu menus[MENU_COUNT] = {
               {"Menu size", 0, ITEM_SUBMENU, 0, -1, SUB_MENU_SIZE},
               {"Fullscreen", "F11", ITEM_CHECK, MENU_ITEM_FULLSCREEN, SET_FULLSCREEN, 0, ITEM_GROUP_BREAK},
               {"Borderless fullscreen", 0, ITEM_CHECK, MENU_ITEM_BORDERLESS, SET_BORDERLESS},
+#ifdef MEMORIES_IOS
+              {"Avoid the notch (safe area)", 0, ITEM_CHECK, 0, SET_SAFE_AREA},
+#endif
 #ifdef __ANDROID__
               {"Screen rotation", 0, ITEM_SUBMENU, 0, -1, SUB_ROTATION},
 #endif
@@ -828,6 +831,7 @@ static void setting_changed(SettingId id, int value)
     case SET_FPS: Platform_SetPresentCap(value); break;
     case SET_MENU_SCALE: Platform_ApplyDisplaySettings(); break;
     case SET_SCREEN_ROTATION: Platform_ApplyDisplaySettings(); break;
+    case SET_SAFE_AREA: Platform_ApplyDisplaySettings(); break;
     default: break;
     }
 }

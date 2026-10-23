@@ -1251,6 +1251,7 @@ static void relayout(void)
      * what the window is laid out for, whatever the internal resolution. */
     int pw = aspect == 1 ? logical_w : aspect == 2 ? logical_h * 16 / 9 : logical_h * 4 / 3;
     int ph = logical_h, area_h, mode = Settings_Get(SET_SCALING);
+    int area_x = 0, area_w;
     float factor;
     if ((!renderer && !use_gl) || picture_w <= 0 || picture_h <= 0 ||
         !SDL_GetWindowSize(window, &window_w, &window_h) ||
@@ -1259,12 +1260,24 @@ static void relayout(void)
         window_w <= 0 || window_h <= 0) {
         return;
     }
+    area_w = window_w;
+    if (Settings_Get(SET_SAFE_AREA)) {
+        /* Clear of a notch or the Dynamic Island: across, the safe area (the
+         * part of the window the system says is not covered); down, the
+         * whole height, as layout_panel() does. */
+        SDL_Rect safe;
+        if (window && SDL_GetWindowSafeArea(window, &safe) && safe.w > 0 && safe.x >= 0 && safe.x + safe.w <= window_w) {
+            area_x = safe.x;
+            area_w = safe.w;
+        }
+    }
     update_menu_scale(window_h);
     menu = menu_visible && !bar_overlays() ? Menu_Height() : 0;
     area_h = window_h - menu;
     if (area_h < 1) area_h = 1;
     layout.win_w = window_w;
     layout.win_h = window_h;
+    if (TouchPad_SetInsets(area_x, window_w - area_x - area_w)) menu_dirty = 1;
     if (TouchPad_Layout(window_w, window_h, menu)) menu_dirty = 1;
     if (Panel_Shown()) layout_panel();
     layout.pixel_x = (float)output_w / (float)window_w;
@@ -1277,22 +1290,22 @@ static void relayout(void)
         logged_output_w = output_w; logged_output_h = output_h;
     }
     if (mode == 2) {
-        layout.dst.x = 0;
+        layout.dst.x = (float)area_x;
         layout.dst.y = (float)menu;
-        layout.dst.w = (float)window_w;
+        layout.dst.w = (float)area_w;
         layout.dst.h = (float)area_h;
     } else if (mode == 1) {
-        factor = SDL_min((float)window_w / (float)pw, (float)area_h / (float)ph);
+        factor = SDL_min((float)area_w / (float)pw, (float)area_h / (float)ph);
         layout.dst.w = (float)pw * factor;
         layout.dst.h = (float)ph * factor;
-        layout.dst.x = ((float)window_w - layout.dst.w) * 0.5f;
+        layout.dst.x = (float)area_x + ((float)area_w - layout.dst.w) * 0.5f;
         layout.dst.y = (float)menu + ((float)area_h - layout.dst.h) * 0.5f;
     } else {
-        int k = SDL_min(window_w / pw, area_h / ph);
+        int k = SDL_min(area_w / pw, area_h / ph);
         if (k < 1) k = 1;
         layout.dst.w = (float)(pw * k);
         layout.dst.h = (float)(ph * k);
-        layout.dst.x = (float)(window_w - pw * k) * 0.5f;
+        layout.dst.x = (float)area_x + (float)(area_w - pw * k) * 0.5f;
         layout.dst.y = (float)menu + (float)(area_h - ph * k) * 0.5f;
     }
     if (overlay && (canvas.width != window_w || canvas.height != window_h)) {

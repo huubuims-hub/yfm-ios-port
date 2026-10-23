@@ -22,7 +22,7 @@ static const uint16_t bits_of[TOUCH_BUTTONS] = {
     [TOUCH_L2] = 0x0100, [TOUCH_R2] = 0x0200, [TOUCH_L1] = 0x0400, [TOUCH_R1] = 0x0800,
     [TOUCH_SELECT] = 0x0001, [TOUCH_START] = 0x0008};
 
-static int mode, touched, blocked, width, height, top;
+static int mode, touched, blocked, width, height, top, inset_left, inset_right;
 static float density; /* window pixels per dp, 0 unknown (TouchPad_SetDensity) */
 static int rects[TOUCH_BUTTONS][4];
 static int unit, dpad_x, dpad_y, face_x, face_y;
@@ -56,6 +56,7 @@ static void place(TouchButton button, int x, int y, int w, int h)
 static void lay_out(void)
 {
     int shorter = width < height ? width : height, s = shorter * 13 / 100, m, bottom, menu_y;
+    int left = inset_left, right = width - inset_right; /* the edges the pad stays inside */
     if (density > 0) {
         int least = (int)(48 * density + 0.5f), most = (int)(80 * density + 0.5f);
         if (s < least) s = least;
@@ -64,12 +65,12 @@ static void lay_out(void)
     }
     m = s * 35 / 100;
     unit = s;
-    dpad_x = m + s * 3 / 2;
-    face_x = width - m - s * 3 / 2;
+    dpad_x = left + m + s * 3 / 2;
+    face_x = right - m - s * 3 / 2;
     dpad_y = face_y = top + (height - top) * 56 / 100;
     menu_y = top + m / 2 + s + m / 2;
     if (dpad_y - 2 * s < menu_y + s) dpad_y = face_y = menu_y + 3 * s;
-    place(TOUCH_MENU, m, menu_y + s / 4, s * 4 / 3, s / 2);
+    place(TOUCH_MENU, left + m, menu_y + s / 4, s * 4 / 3, s / 2);
     place(TOUCH_UP, dpad_x - s / 2, dpad_y - s * 3 / 2, s, s);
     place(TOUCH_DOWN, dpad_x - s / 2, dpad_y + s / 2, s, s);
     place(TOUCH_LEFT, dpad_x - s * 3 / 2, dpad_y - s / 2, s, s);
@@ -78,10 +79,10 @@ static void lay_out(void)
     place(TOUCH_CROSS, face_x - s / 2, face_y + s / 2, s, s);
     place(TOUCH_SQUARE, face_x - s * 3 / 2, face_y - s / 2, s, s);
     place(TOUCH_CIRCLE, face_x + s / 2, face_y - s / 2, s, s);
-    place(TOUCH_L2, m, top + m / 2, s, s);
-    place(TOUCH_L1, m + s * 23 / 20, top + m / 2, s, s);
-    place(TOUCH_R1, width - m - s * 43 / 20, top + m / 2, s, s);
-    place(TOUCH_R2, width - m - s, top + m / 2, s, s);
+    place(TOUCH_L2, left + m, top + m / 2, s, s);
+    place(TOUCH_L1, left + m + s * 23 / 20, top + m / 2, s, s);
+    place(TOUCH_R1, right - m - s * 43 / 20, top + m / 2, s, s);
+    place(TOUCH_R2, right - m - s, top + m / 2, s, s);
     bottom = height - m / 2;
     place(TOUCH_SELECT, dpad_x - s, bottom - s * 3 / 5, s * 2, s / 2);
     place(TOUCH_START, face_x - s * 4 / 5, bottom - s * 4 / 5, s * 8 / 5, s * 4 / 5);
@@ -91,6 +92,18 @@ int TouchPad_SetDensity(float pixels_per_dp)
 {
     if (pixels_per_dp == density) return 0;
     density = pixels_per_dp;
+    lay_out();
+    return TouchPad_Shown();
+}
+
+int TouchPad_SetInsets(int left, int right)
+{
+    if (left < 0) left = 0;
+    if (right < 0) right = 0;
+    if (left == inset_left && right == inset_right) return 0;
+    inset_left = left;
+    inset_right = right;
+    if (width <= 0 || height <= 0) return 0; /* the next TouchPad_Layout lays out */
     lay_out();
     return TouchPad_Shown();
 }

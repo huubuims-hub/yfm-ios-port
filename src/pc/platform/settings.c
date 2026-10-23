@@ -75,6 +75,14 @@ static const SettingInfo info[SET_COUNT] = {
      * phone whether auto-rotate is on or not, 1 it follows the system's
      * auto-rotate (android.c, Android_ApplyScreenRotation). */
     [SET_SCREEN_ROTATION] = {"screen_rotation", NULL, "MEMORIES_SCREEN_ROTATION", NULL, 0, 0, 1},
+    /* On by default on iOS, where a notch or the Dynamic Island sits at a side
+     * of the landscape screen; a device without one has a safe area as wide as
+     * the window, so it changes nothing there. */
+#ifdef MEMORIES_IOS
+    [SET_SAFE_AREA] = {"safe_area", NULL, "MEMORIES_SAFE_AREA", NULL, 1, 0, 1},
+#else
+    [SET_SAFE_AREA] = {"safe_area", NULL, "MEMORIES_SAFE_AREA", NULL, 0, 0, 1},
+#endif
     [SET_MASTER_VOLUME] = {"master_volume", "volume", "MEMORIES_MASTER_VOLUME", "MEMORIES_VOLUME", 100, 0, 100},
     [SET_MUSIC_VOLUME] = {"music_volume", NULL, "MEMORIES_MUSIC_VOLUME", NULL, 100, 0, 100},
     [SET_SFX_VOLUME] = {"sfx_volume", NULL, "MEMORIES_SFX_VOLUME", NULL, 100, 0, 100},

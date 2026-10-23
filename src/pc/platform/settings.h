@@ -69,6 +69,7 @@ typedef enum {
     SET_TOUCH_PAD,
     SET_CRASH_REPORT_OFFER,
     SET_SCREEN_ROTATION,
+    SET_SAFE_AREA,              /* 1 keeps the picture and the touch pad clear of a notch (sdl.c relayout) */
     SET_COUNT
 } SettingId;
 
