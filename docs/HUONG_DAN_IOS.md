@@ -87,3 +87,10 @@ YFM Re-Decomp**. Lần mở đầu app tự tạo thư mục `game` và `mods`.
 - Nếu hộp thoại không hiện, cách thủ công: mở **Tệp > Trên iPhone > YFM Re-Decomp**,
   **xóa file `settings.txt`** (hoặc mở nó và đặt `internal_scale=1`, `msaa=0`),
   rồi mở lại app.
+
+## Icon của app
+
+Icon (chữ "YFM1" và "iOSRecompile") nằm trong `tools/pc/ios_assets/`. Muốn đổi icon,
+thay file `AppIcon-1024.png` và các file trong thư mục `icons/` (đúng tên và kích thước),
+rồi build lại. Nếu sau khi cài vẫn thấy icon trống, hãy xóa app, cài lại, hoặc khởi động
+lại iPhone, vì iOS lưu tạm icon cũ.

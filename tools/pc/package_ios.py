@@ -77,6 +77,26 @@ def stage_mods(app, game):
     return files, libraries
 
 
+ICON_SIZES = ("20x20", "29x29", "40x40", "60x60", "76x76", "83.5x83.5")
+
+
+def install_icons(app):
+    """Copy the pre-scaled icons (tools/pc/ios_assets/icons) into the bundle
+    and return the CFBundleIcons dictionary that lists them, and the names. The app has no
+    asset catalog, so Info.plist names the PNG files: iOS picks the one that
+    fits (AppIconWxH@2x.png, @3x.png). Fails when one is missing."""
+    source = ROOT / "tools/pc/ios_assets/icons"
+    for size in ICON_SIZES:
+        for scale in ("@2x", "@3x"):
+            png = source / f"AppIcon{size}{scale}.png"
+            if png.is_file():
+                shutil.copyfile(png, app / png.name)
+    if not (app / "AppIcon60x60@2x.png").is_file() or not (app / "AppIcon60x60@3x.png").is_file():
+        raise ValueError("the 60x60 icons (iPhone's home screen) are missing from tools/pc/ios_assets/icons")
+    names = [f"AppIcon{size}" for size in ICON_SIZES]
+    return {"CFBundlePrimaryIcon": {"CFBundleIconFiles": names}}, names
+
+
 def package(binary, out, label):
     if sys.platform != "darwin":
         raise ValueError("iOS packaging requires codesign and zip on a Mac")
@@ -96,6 +116,7 @@ def package(binary, out, label):
     for name in ("en-eu", "fr", "de", "it", "es"):
         shutil.copyfile(ROOT / f"languages/{name}.txt", languages / f"{name}.txt")
     mod_files, mod_libraries = stage_mods(app, binary.parent)
+    icons, icon_names = install_icons(app)
     shutil.copyfile(ROOT / "LICENSE", app / "LICENSE.txt")
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     release = re.match(r"^v?(\d+\.\d+\.\d+)(?:[-.].*)?$", label)
@@ -119,6 +140,11 @@ def package(binary, out, label):
         UIStatusBarHidden=True,
         UIViewControllerBasedStatusBarAppearance=False,
         UILaunchScreen={},
+        # The icon: PNG files in the bundle's root, no asset catalog
+        # (tools/pc/ios_assets, install_icons above).
+        CFBundleIcons=icons,
+        **{"CFBundleIcons~ipad": icons},
+        CFBundleIconFiles=icon_names,
         # Documents shows up in the Files app under "On My iPhone", so a
         # disc image (.bin) can be copied in without a picker in the game.
         UIFileSharingEnabled=True,
