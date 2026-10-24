@@ -24,6 +24,7 @@ static const uint16_t bits_of[TOUCH_BUTTONS] = {
 
 static int mode, touched, blocked, width, height, top, inset_left, inset_right;
 static float density; /* window pixels per dp, 0 unknown (TouchPad_SetDensity) */
+static int tablet_most_dp; /* 0: no tablet rule (TouchPad_SetTabletLimit) */
 static int rects[TOUCH_BUTTONS][4];
 static int unit, dpad_x, dpad_y, face_x, face_y;
 static Finger fingers[FINGERS];
@@ -59,6 +60,12 @@ static void lay_out(void)
     int left = inset_left, right = width - inset_right; /* the edges the pad stays inside */
     if (density > 0) {
         int least = (int)(48 * density + 0.5f), most = (int)(80 * density + 0.5f);
+        /* A tablet (short side of 600 dp or more): the picture fills its
+         * screen with no black bars, and the buttons sit over it. */
+        if (tablet_most_dp > 0 && shorter >= (int)(600 * density + 0.5f)) {
+            most = (int)(tablet_most_dp * density + 0.5f);
+            if (most < least) most = least;
+        }
         if (s < least) s = least;
         if (s > most) s = most;
         if (s > shorter * 16 / 100) s = shorter * 16 / 100;
@@ -92,6 +99,16 @@ int TouchPad_SetDensity(float pixels_per_dp)
 {
     if (pixels_per_dp == density) return 0;
     density = pixels_per_dp;
+    lay_out();
+    return TouchPad_Shown();
+}
+
+int TouchPad_SetTabletLimit(int most_dp)
+{
+    if (most_dp < 0) most_dp = 0;
+    if (most_dp == tablet_most_dp) return 0;
+    tablet_most_dp = most_dp;
+    if (width <= 0 || height <= 0) return 0; /* the next TouchPad_Layout lays out */
     lay_out();
     return TouchPad_Shown();
 }

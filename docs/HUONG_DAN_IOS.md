@@ -94,3 +94,19 @@ Icon (chữ "YFM1" và "iOSRecompile") nằm trong `tools/pc/ios_assets/`. Muố
 thay file `AppIcon-1024.png` và các file trong thư mục `icons/` (đúng tên và kích thước),
 rồi build lại. Nếu sau khi cài vẫn thấy icon trống, hãy xóa app, cài lại, hoặc khởi động
 lại iPhone, vì iOS lưu tạm icon cũ.
+
+## Xem log khi app lỗi hoặc treo (không cần Mac)
+
+App tự ghi log vào thư mục **logs** trong **Tệp > Trên iPhone > YFM Re-Decomp**:
+
+- `log.txt`: log của lần mở app hiện tại.
+- `log-previous.txt`: log của lần mở trước. Nếu app vừa bị treo, bị hệ thống tắt
+  hoặc bị lỗi, hãy mở lại app rồi gửi file này.
+- Thư mục `reports` (cùng cấp): báo cáo khi app bị crash hoặc treo.
+
+Gửi cho mình cả ba nếu có. Trong log có dòng "memory ... MB held, ... MB left,
+thermal ..." mỗi 10 giây: nhờ đó biết máy chậm vì nóng (thermal `fair`/`serious`)
+hay vì thiếu bộ nhớ ("left" gần 0 trước khi file dừng).
+
+Muốn log chi tiết hơn: tạo file văn bản tên `trace.txt` trong thư mục
+YFM Re-Decomp, dòng đầu ghi `frames,window` (hoặc `all`), rồi mở lại app.

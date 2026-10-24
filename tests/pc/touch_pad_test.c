@@ -121,6 +121,28 @@ int main(void)
         assert(ux == 96);
         assert(!TouchPad_SetMode(TOUCH_PAD_HIDE) || !TouchPad_FreeSpan(&left, &right));
     }
+    /* iPad: the window is in points, one to the dp. Over a 4:3 picture that
+     * fills the screen, a tablet's buttons stop at the tablet limit, a
+     * phone's at the usual 80 dp. */
+    {
+        int bx, by, bw, bh;
+        TouchPad_SetMode(TOUCH_PAD_SHOW);
+        TouchPad_SetDensity(1.0f);
+        TouchPad_Layout(1366, 1024, 0);
+        TouchPad_Rect(TOUCH_CROSS, &bx, &by, &bw, &bh);
+        assert(bw == 80 && bh == 80); /* no tablet rule set: 13% would be 133 */
+        assert(TouchPad_SetTabletLimit(64));
+        TouchPad_Rect(TOUCH_CROSS, &bx, &by, &bw, &bh);
+        assert(bw == 64 && bh == 64);
+        TouchPad_Layout(1133, 744, 0); /* iPad mini */
+        TouchPad_Rect(TOUCH_CROSS, &bx, &by, &bw, &bh);
+        assert(bw == 64);
+        TouchPad_Layout(667, 375, 0); /* iPhone 6s: a phone keeps its size */
+        TouchPad_Rect(TOUCH_CROSS, &bx, &by, &bw, &bh);
+        assert(bw == 48);
+        TouchPad_SetTabletLimit(0);
+        TouchPad_SetMode(TOUCH_PAD_HIDE);
+    }
     puts("touch pad: showing, D-pad angles, face buttons, taps, fingers, hiding, MENU, blocking, density passed");
     return 0;
 }

@@ -1,138 +1,305 @@
-/* The on-screen controller's pictures (touch_pad_art.h). */
+/* The on-screen controller's pictures (touch_pad_art.h).
+ *
+ * Every button is drawn here as a vector shape (signed distance fields with
+ * a one-pixel soft edge) at the size the layout gives it, so it is smooth at
+ * any screen size, on a phone or a tablet. The game's own 16 x 16 button
+ * sprites it used before were enlarged with nearest-texel sampling, which
+ * made the edges coarse and stair-stepped, and needed the disc. A button is
+ * drawn once per size and state (up, held) into a small picture, which each
+ * frame then only blends onto the canvas. Text is the overlay font's
+ * (overlay_text.h), anti-aliased too. */
 #include "touch_pad_art.h"
 #include "touch_pad.h"
-#include "pc/cards/disc_art.h"
 #include "pc/text/overlay_text.h"
-#include <stdio.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
-/* Main_RunBootSequence's package (font_art.c has its layout): 48 sectors of
- * image from VRAM 0x280, 0, then two sectors of palettes loaded at 0x200,
- * 0xF8 (256 x 8), then the text color ramps at 0x280, 0xE8. The buttons
- * are 4-bit on the page at 0x2C0 (page 11) with the palette at 0x200, 0xFC,
- * the same the password screen's OK/END row and the duel's help use; the
- * text font is on the page at 0x280. */
+typedef struct { float x, y; } V2;
+typedef struct { uint32_t *pixels; int w, h; } Sprite;
+
+/* Sprites by button, [0] let go, [1] held. */
+static Sprite sprites[TOUCH_BUTTONS][2];
+
 enum {
-    BOOT_SECTOR = 0x1690, IMAGE_SECTORS = 48, IMAGE_X = 0x280, IMAGE_Y = 0,
-    PALETTE_SECTOR = BOOT_SECTOR + 48, PALETTE_X = 0x200, PALETTE_Y = 0xF8, PALETTE_W = 0x100, PALETTE_H = 8,
-    RAMP_SECTOR = BOOT_SECTOR + 50, RAMP_X = 0x280, RAMP_Y = 0xE8, RAMP_W = 16, RAMP_H = 8,
-    BUTTON_PAGE = 0x2C0, BUTTON_CLUT_X = 0x200, BUTTON_CLUT_Y = 0xFC, FONT_PAGE = 0x280
+    BODY = 0x10141C,  /* the dark glass behind a symbol */
+    LIGHT = 0xF4F6FA, /* rims, arrows and text */
+    GREEN = 0x58D6A4, /* Triangle */
+    RED = 0xFF6F7D,   /* Circle */
+    BLUE = 0x6FAEFF,  /* Cross */
+    PINK = 0xF0A3DA   /* Square */
 };
 
-typedef struct { int u, v, w, h; } Cell;
-/* Where each button's picture is on the button page. Left is Right's arrow
- * turned round: the page has no box pointing left. */
-static const Cell cells[TOUCH_BUTTONS] = {
-    [TOUCH_UP] = {112, 176, 16, 16}, [TOUCH_DOWN] = {112, 160, 16, 16},
-    [TOUCH_LEFT] = {96, 160, 16, 16}, [TOUCH_RIGHT] = {96, 160, 16, 16},
-    [TOUCH_CROSS] = {16, 128, 16, 16}, [TOUCH_TRIANGLE] = {32, 128, 16, 16},
-    [TOUCH_SQUARE] = {48, 128, 16, 16}, [TOUCH_CIRCLE] = {64, 128, 16, 16},
-    [TOUCH_L1] = {0, 216, 16, 16}, [TOUCH_R1] = {16, 216, 16, 16},
-    [TOUCH_L2] = {32, 224, 16, 16}, [TOUCH_R2] = {48, 216, 16, 16},
-    [TOUCH_START] = {96, 128, 32, 16}};
-/* SELECT and MENU in the text font (8 x 12 cells of its full-width capitals;
- * glyphs.c's retail_cell). */
-static const char select_text[] = "SELECT", menu_text[] = "MENU";
-static const Cell letters[] = {{16, 36, 8, 12}, {32, 24, 8, 12}, {88, 24, 8, 12}, {32, 24, 8, 12}, {16, 24, 8, 12},
-                               {24, 36, 8, 12}};
-static const Cell menu_letters[] = {{96, 24, 8, 12}, {32, 24, 8, 12}, {104, 24, 8, 12}, {32, 36, 8, 12}};
+/* --- distances, in pixels; negative inside ----------------------------- */
 
-static struct {
-    int state; /* 0 unread, 1 read, -1 not readable */
-    DiscArt button[TOUCH_BUTTONS], letter[sizeof(select_text) - 1], menu_letter[sizeof(menu_text) - 1];
-} art;
-
-static int read_art(void)
+static V2 v2(float x, float y)
 {
-    int i;
-    if (!DiscArt_LoadImage(BOOT_SECTOR, IMAGE_SECTORS, IMAGE_X, IMAGE_Y) ||
-        !DiscArt_LoadRect(PALETTE_SECTOR, 0, PALETTE_X, PALETTE_Y, PALETTE_W, PALETTE_H) ||
-        !DiscArt_LoadRect(RAMP_SECTOR, 0, RAMP_X, RAMP_Y, RAMP_W, RAMP_H))
-        return 0;
-    for (i = 0; i < TOUCH_BUTTONS; i++) {
-        if (i == TOUCH_SELECT || i == TOUCH_MENU) continue;
-        if (!DiscArt_Cut(&art.button[i], BUTTON_PAGE, 0, 4, cells[i].u, cells[i].v, cells[i].w, cells[i].h,
-                         BUTTON_CLUT_X, BUTTON_CLUT_Y))
-            return 0;
+    V2 v = {x, y};
+    return v;
+}
+static V2 sub(V2 a, V2 b) { return v2(a.x - b.x, a.y - b.y); }
+static float dot(V2 a, V2 b) { return a.x * b.x + a.y * b.y; }
+static float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
+static float length(V2 a) { return sqrtf(dot(a, a)); }
+
+static float sd_circle(V2 p, float r) { return length(p) - r; }
+
+/* A box of half sizes hx, hy with corners rounded by r. */
+static float sd_box(V2 p, float hx, float hy, float r)
+{
+    V2 q = v2(fabsf(p.x) - (hx - r), fabsf(p.y) - (hy - r));
+    V2 o = v2(q.x > 0 ? q.x : 0, q.y > 0 ? q.y : 0);
+    float inner = q.x > q.y ? q.x : q.y;
+    return length(o) + (inner < 0 ? inner : 0) - r;
+}
+
+static float sd_segment(V2 p, V2 a, V2 b)
+{
+    V2 pa = sub(p, a), ba = sub(b, a);
+    float h = clampf(dot(pa, ba) / dot(ba, ba), 0.0f, 1.0f);
+    return length(v2(pa.x - ba.x * h, pa.y - ba.y * h));
+}
+
+/* A triangle's distance (negative inside), whichever way it is wound. */
+static float sd_triangle(V2 p, V2 a, V2 b, V2 c)
+{
+    V2 e0 = sub(b, a), e1 = sub(c, b), e2 = sub(a, c);
+    V2 v0 = sub(p, a), v1 = sub(p, b), v2_ = sub(p, c);
+    float h0 = clampf(dot(v0, e0) / dot(e0, e0), 0.0f, 1.0f);
+    float h1 = clampf(dot(v1, e1) / dot(e1, e1), 0.0f, 1.0f);
+    float h2 = clampf(dot(v2_, e2) / dot(e2, e2), 0.0f, 1.0f);
+    V2 q0 = v2(v0.x - e0.x * h0, v0.y - e0.y * h0);
+    V2 q1 = v2(v1.x - e1.x * h1, v1.y - e1.y * h1);
+    V2 q2 = v2(v2_.x - e2.x * h2, v2_.y - e2.y * h2);
+    float s = e0.x * e2.y - e0.y * e2.x;
+    float s0 = v0.x * e0.y - v0.y * e0.x, s1 = v1.x * e1.y - v1.y * e1.x, s2 = v2_.x * e2.y - v2_.y * e2.x;
+    float d2 = fminf(fminf(dot(q0, q0), dot(q1, q1)), dot(q2, q2));
+    float side = fminf(fminf(s * s0, s * s1), s * s2);
+    return side > 0 ? -sqrtf(d2) : sqrtf(d2);
+}
+
+/* --- compositing -------------------------------------------------------- */
+
+/* Color accumulated in premultiplied floats. */
+typedef struct { float r, g, b, a; } Pixel;
+
+/* Coverage of a pixel whose centre is d away from an edge (a one-pixel ramp). */
+static float cover(float d) { return clampf(0.5f - d, 0.0f, 1.0f); }
+
+static void over(Pixel *p, uint32_t color, float coverage, float opacity)
+{
+    float a = coverage * opacity, keep = 1.0f - a;
+    if (a <= 0.0f) return;
+    p->r = (float)(color >> 16 & 255) / 255.0f * a + p->r * keep;
+    p->g = (float)(color >> 8 & 255) / 255.0f * a + p->g * keep;
+    p->b = (float)(color & 255) / 255.0f * a + p->b * keep;
+    p->a = a + p->a * keep;
+}
+
+/* 0xAARRGGBB with straight (not premultiplied) color. */
+static uint32_t pack(const Pixel *p)
+{
+    float a = p->a;
+    unsigned ia, r, g, b;
+    if (a <= 0.002f) return 0;
+    ia = (unsigned)(a * 255.0f + 0.5f);
+    r = (unsigned)clampf(p->r / a * 255.0f + 0.5f, 0.0f, 255.0f);
+    g = (unsigned)clampf(p->g / a * 255.0f + 0.5f, 0.0f, 255.0f);
+    b = (unsigned)clampf(p->b / a * 255.0f + 0.5f, 0.0f, 255.0f);
+    return (ia > 255 ? 255u : ia) << 24 | r << 16 | g << 8 | b;
+}
+
+/* The D-pad's arrow is one triangle pointing up; a point is turned so that
+ * the button's direction lands on it. */
+static V2 turn_to_up(V2 p, TouchButton direction)
+{
+    switch (direction) {
+    case TOUCH_DOWN: return v2(p.x, -p.y);
+    case TOUCH_LEFT: return v2(p.y, p.x);
+    case TOUCH_RIGHT: return v2(p.y, -p.x);
+    default: return p;
     }
-    for (i = 0; select_text[i]; i++) {
-        if (!DiscArt_Cut(&art.letter[i], FONT_PAGE, 0, 4, letters[i].u, letters[i].v, letters[i].w, letters[i].h,
-                         RAMP_X, RAMP_Y))
-            return 0;
+}
+
+/* --- one button's pixels ------------------------------------------------ */
+
+typedef struct {
+    TouchButton button;
+    int down;
+    int w, h;
+    float s; /* the layout's button size */
+} Shape;
+
+static uint32_t face_color(TouchButton b)
+{
+    return b == TOUCH_TRIANGLE ? GREEN : b == TOUCH_CIRCLE ? RED : b == TOUCH_CROSS ? BLUE : PINK;
+}
+
+/* A face button: dark glass in a ring of its color, and its symbol. Held, the
+ * glass fills with the color and the symbol turns dark, a little smaller. */
+static uint32_t face_pixel(const Shape *sh, V2 p)
+{
+    Pixel px = {0, 0, 0, 0};
+    float s = sh->s, radius = s * (sh->down ? 0.43f : 0.46f), ring = s * 0.05f, r = s * 0.19f, t = s * 0.055f, d;
+    uint32_t color = face_color(sh->button), symbol = sh->down ? BODY : color;
+    over(&px, sh->down ? color : BODY, cover(sd_circle(p, radius)), sh->down ? 0.88f : 0.55f);
+    d = fabsf(sd_circle(p, radius - ring * 0.5f)) - ring * 0.5f;
+    over(&px, sh->down ? LIGHT : color, cover(d), sh->down ? 0.9f : 0.95f);
+    switch (sh->button) {
+    case TOUCH_TRIANGLE: {
+        float k = r * 0.93f, rr = s * 0.025f; /* rounded: the triangle grown by rr */
+        V2 a = v2(0, -k * 1.05f + rr), b = v2(k * 0.95f - rr, k * 0.7f - rr * 0.6f),
+           c = v2(-k * 0.95f + rr, k * 0.7f - rr * 0.6f);
+        V2 q = v2(p.x, p.y + s * 0.015f);
+        d = fabsf(sd_triangle(q, a, b, c) - rr) - t * 0.5f;
+        break;
     }
-    for (i = 0; menu_text[i]; i++) {
-        if (!DiscArt_Cut(&art.menu_letter[i], FONT_PAGE, 0, 4, menu_letters[i].u, menu_letters[i].v,
-                         menu_letters[i].w, menu_letters[i].h, RAMP_X, RAMP_Y))
-            return 0;
+    case TOUCH_CIRCLE: d = fabsf(sd_circle(p, r * 0.98f)) - t * 0.5f; break;
+    case TOUCH_CROSS: {
+        float k = r * 0.86f;
+        float d1 = sd_segment(p, v2(-k, -k), v2(k, k)), d2 = sd_segment(p, v2(-k, k), v2(k, -k));
+        d = fminf(d1, d2) - t * 0.5f;
+        break;
     }
+    default: d = fabsf(sd_box(p, r * 0.92f, r * 0.92f, s * 0.03f)) - t * 0.5f; break;
+    }
+    over(&px, symbol, cover(d), 0.98f);
+    return pack(&px);
+}
+
+/* A D-pad key: a rounded square of dark glass with a light rim and an arrow
+ * pointing out; held, it fills light and the arrow turns dark. */
+static uint32_t key_pixel(const Shape *sh, V2 p)
+{
+    Pixel px = {0, 0, 0, 0};
+    float s = sh->s, half = s * 0.5f - s * 0.05f, corner = s * 0.2f, rim = s * 0.035f, d, k = s * 0.17f, rr = s * 0.03f;
+    V2 q = turn_to_up(p, sh->button);
+    over(&px, sh->down ? LIGHT : BODY, cover(sd_box(p, half, half, corner)), sh->down ? 0.82f : 0.55f);
+    d = fabsf(sd_box(p, half - rim * 0.5f, half - rim * 0.5f, corner - rim * 0.5f)) - rim * 0.5f;
+    over(&px, LIGHT, cover(d), sh->down ? 0.95f : 0.55f);
+    d = sd_triangle(q, v2(0, -k * 1.1f + rr), v2(k - rr, k * 0.75f - rr * 0.6f), v2(-k + rr, k * 0.75f - rr * 0.6f)) - rr;
+    over(&px, sh->down ? BODY : LIGHT, cover(d), 0.97f);
+    return pack(&px);
+}
+
+/* A pill: a shoulder tab, or SELECT, START and MENU, centred in the
+ * button's rectangle. */
+static uint32_t pill_pixel(const Shape *sh, V2 p, float width, float height, float corner)
+{
+    Pixel px = {0, 0, 0, 0};
+    float rim = sh->s * 0.035f, d;
+    over(&px, sh->down ? LIGHT : BODY, cover(sd_box(p, width * 0.5f, height * 0.5f, corner)), sh->down ? 0.82f : 0.55f);
+    d = fabsf(sd_box(p, width * 0.5f - rim * 0.5f, height * 0.5f - rim * 0.5f, corner - rim * 0.5f)) - rim * 0.5f;
+    over(&px, LIGHT, cover(d), sh->down ? 0.95f : 0.55f);
+    return pack(&px);
+}
+
+static const char *label_of(TouchButton b)
+{
+    switch (b) {
+    case TOUCH_L1: return "L1";
+    case TOUCH_L2: return "L2";
+    case TOUCH_R1: return "R1";
+    case TOUCH_R2: return "R2";
+    case TOUCH_SELECT: return "SELECT";
+    case TOUCH_START: return "START";
+    case TOUCH_MENU: return "MENU";
+    default: return NULL;
+    }
+}
+
+static int is_pill(TouchButton b) { return b == TOUCH_SELECT || b == TOUCH_START || b == TOUCH_MENU; }
+static int is_shoulder(TouchButton b) { return b == TOUCH_L1 || b == TOUCH_L2 || b == TOUCH_R1 || b == TOUCH_R2; }
+
+/* The pill's measures inside the button's rectangle. */
+static void pill_measures(const Shape *sh, float *width, float *height, float *corner)
+{
+    float s = sh->s;
+    if (is_shoulder(sh->button)) {
+        *width = s * 0.94f;
+        *height = s * 0.58f;
+        *corner = s * 0.2f;
+    } else {
+        *width = (float)sh->w - s * 0.06f;
+        *height = fminf((float)sh->h - s * 0.06f, s * 0.56f);
+        *corner = *height * 0.5f;
+    }
+}
+
+static void free_sprite(Sprite *sprite)
+{
+    free(sprite->pixels);
+    memset(sprite, 0, sizeof(*sprite));
+}
+
+static void paint_label(Sprite *sprite, const Shape *sh, float width, float height)
+{
+    const char *text = label_of(sh->button);
+    MenuCanvas tmp;
+    int size, tw;
+    if (!text) return;
+    size = (int)(is_shoulder(sh->button) ? sh->s * 0.30f : height * 0.5f + 0.5f);
+    if (size < 6) size = 6;
+    while ((tw = OverlayText_Width(text, size)) > (int)(width * 0.86f) && size > 6) size--;
+    tmp.pixels = sprite->pixels;
+    tmp.stride = tmp.width = sprite->w;
+    tmp.height = sprite->h;
+    tmp.alpha = 1;
+    OverlayText_Draw(&tmp, (sprite->w - tw) / 2, sprite->h / 2, sprite->w, text, size, sh->down ? BODY : LIGHT);
+}
+
+static int build(Sprite *sprite, TouchButton button, int down, int w, int h, float s)
+{
+    Shape sh = {button, down, w, h, s};
+    float pill_w = 0, pill_h = 0, pill_corner = 0;
+    int i, j;
+    if (w <= 0 || h <= 0) return 0;
+    sprite->pixels = malloc((size_t)w * (size_t)h * sizeof(uint32_t));
+    if (!sprite->pixels) return 0;
+    sprite->w = w;
+    sprite->h = h;
+    if (is_pill(button) || is_shoulder(button)) pill_measures(&sh, &pill_w, &pill_h, &pill_corner);
+    for (j = 0; j < h; j++) {
+        for (i = 0; i < w; i++) {
+            V2 p = v2((float)i + 0.5f - (float)w * 0.5f, (float)j + 0.5f - (float)h * 0.5f);
+            uint32_t color;
+            if (button >= TOUCH_TRIANGLE && button <= TOUCH_SQUARE) color = face_pixel(&sh, p);
+            else if (button <= TOUCH_RIGHT) color = key_pixel(&sh, p);
+            else color = pill_pixel(&sh, p, pill_w, pill_h, pill_corner);
+            sprite->pixels[j * w + i] = color;
+        }
+    }
+    if (label_of(button)) paint_label(sprite, &sh, pill_w, pill_h);
     return 1;
 }
 
 void TouchPadArt_Reset(void)
 {
     int i;
-    for (i = 0; i < TOUCH_BUTTONS; i++) DiscArt_Free(&art.button[i]);
-    for (i = 0; select_text[i]; i++) DiscArt_Free(&art.letter[i]);
-    for (i = 0; menu_text[i]; i++) DiscArt_Free(&art.menu_letter[i]);
-    art.state = 0;
-}
-
-static int ready(void)
-{
-    if (!art.state) {
-        if (!read_art()) {
-            TouchPadArt_Reset();
-            art.state = -1;
-            fprintf(stderr, "memories-pc: touch controls: the game's button pictures are not on this disc\n");
-        } else {
-            art.state = 1;
-        }
-        DiscArt_Reset(); /* the pictures are cut; the private VRAM is not needed again */
+    for (i = 0; i < TOUCH_BUTTONS; i++) {
+        free_sprite(&sprites[i][0]);
+        free_sprite(&sprites[i][1]);
     }
-    return art.state > 0;
 }
 
-/* The texels window column (or row) i of n covers, of a source of s: the one
- * under its centre when enlarged, all it spans when shrunk (disc_art.c). */
-static void span(int i, int n, int s, int *first, int *last)
+/* The button's picture in a state, made again when the layout's size changed. */
+static const Sprite *sprite_for(TouchButton button, int down, int w, int h, float s)
 {
-    if (n >= s) {
-        *first = *last = (int)(((2 * (long long)i + 1) * s) / (2 * (long long)n));
-        return;
-    }
-    *first = (int)((long long)i * s / n);
-    *last = (int)((long long)(i + 1) * s / n) - 1;
-    if (*last < *first) *last = *first;
+    Sprite *sprite = &sprites[button][down ? 1 : 0];
+    if (sprite->pixels && sprite->w == w && sprite->h == h) return sprite;
+    free_sprite(sprite);
+    return build(sprite, button, down, w, h, s) ? sprite : NULL;
 }
 
-/* DiscArt_Draw with an opacity (0-255), and turned round left to right. */
-static void draw(MenuCanvas *canvas, const DiscArt *picture, int x, int y, int w, int h, unsigned opacity, int mirror)
+static void blit(MenuCanvas *canvas, const Sprite *sprite, int x, int y)
 {
     int i, j;
-    if (!picture->pixels || w <= 0 || h <= 0) return;
-    for (j = 0; j < h; j++) {
-        int top, bottom;
+    for (j = 0; j < sprite->h; j++) {
         if (y + j < 0 || y + j >= canvas->height) continue;
-        span(j, h, picture->height, &top, &bottom);
-        for (i = 0; i < w; i++) {
-            int left, right, sx, sy;
-            unsigned r = 0, g = 0, b = 0, opaque = 0, total = 0;
-            if (x + i < 0 || x + i >= canvas->width) continue;
-            span(mirror ? w - 1 - i : i, w, picture->width, &left, &right);
-            for (sy = top; sy <= bottom; sy++) {
-                for (sx = left; sx <= right; sx++) {
-                    uint32_t texel = picture->pixels[sy * picture->width + sx];
-                    total++;
-                    if (!(texel >> 24)) continue;
-                    opaque++;
-                    r += texel >> 16 & 255;
-                    g += texel >> 8 & 255;
-                    b += texel & 255;
-                }
-            }
-            if (!opaque) continue;
-            OverlayText_Blend(canvas, x + i, y + j, (r / opaque) << 16 | (g / opaque) << 8 | b / opaque,
-                              opaque * opacity / total);
+        for (i = 0; i < sprite->w; i++) {
+            uint32_t texel = sprite->pixels[j * sprite->w + i];
+            if (texel >> 24) OverlayText_Blend(canvas, x + i, y + j, texel & 0xFFFFFF, texel >> 24);
         }
     }
 }
@@ -147,27 +314,17 @@ static void grow(int *x0, int *y0, int *x1, int *y1, int x, int y, int w, int h)
 
 void TouchPadArt_Draw(MenuCanvas *canvas, int *x, int *y, int *w, int *h)
 {
-    int x0 = 1 << 30, y0 = 1 << 30, x1 = -(1 << 30), y1 = -(1 << 30), i, bx, by, bw, bh;
+    int x0 = 1 << 30, y0 = 1 << 30, x1 = -(1 << 30), y1 = -(1 << 30), i, bx, by, bw, bh, cx, cy, cw, ch;
+    float s;
     *x = *y = *w = *h = 0;
-    if (!TouchPad_Shown() || !ready()) return;
+    if (!TouchPad_Shown() || !TouchPad_Rect(TOUCH_CROSS, &cx, &cy, &cw, &ch)) return;
+    s = (float)(cw < ch ? cw : ch);
     for (i = 0; i < TOUCH_BUTTONS; i++) {
-        /* Let go, the picture is see-through over what is behind it; held,
-         * it is solid and a little smaller, as if pushed in. */
-        int down = TouchPad_Held((TouchButton)i), inset;
-        unsigned opacity = down ? 255 : 150;
+        const Sprite *sprite;
         if (!TouchPad_Rect((TouchButton)i, &bx, &by, &bw, &bh)) return;
         grow(&x0, &y0, &x1, &y1, bx, by, bw, bh);
-        inset = down ? bw / 16 : 0;
-        if (i == TOUCH_SELECT || i == TOUCH_MENU) {
-            const DiscArt *word = i == TOUCH_SELECT ? art.letter : art.menu_letter;
-            int n = (int)(i == TOUCH_SELECT ? sizeof(select_text) : sizeof(menu_text)) - 1, k, letter_w = bw / n;
-            for (k = 0; k < n; k++)
-                draw(canvas, &word[k], bx + k * letter_w + inset / 2, by + inset / 2, letter_w - inset,
-                     bh - inset, opacity, 0);
-        } else {
-            draw(canvas, &art.button[i], bx + inset, by + inset * bh / bw, bw - 2 * inset, bh - 2 * inset * bh / bw,
-                 opacity, i == TOUCH_LEFT);
-        }
+        sprite = sprite_for((TouchButton)i, TouchPad_Held((TouchButton)i), bw, bh, s);
+        if (sprite) blit(canvas, sprite, bx, by);
     }
     if (x0 < 0) x0 = 0;
     if (y0 < 0) y0 = 0;
