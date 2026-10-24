@@ -1,7 +1,7 @@
 # Hướng dẫn từng bước: đưa mã nguồn lên GitHub và build iOS bằng GitHub Actions
 
-> Trạng thái: **chưa từng chạy được trên iPhone**. Các lần build đầu có thể báo
-> lỗi; đó là bình thường vì mục tiêu là lấy log lỗi để sửa tiếp.
+> Trạng thái: **đã chạy được trên iPhone**. Nếu build báo lỗi, hãy gửi log lỗi
+> (xem Bước 6) để sửa tiếp.
 
 Bạn không cần biết lập trình và không cần dùng dòng lệnh. Mọi thứ làm bằng
 chuột với **GitHub Desktop**.
@@ -110,3 +110,23 @@ hay vì thiếu bộ nhớ ("left" gần 0 trước khi file dừng).
 
 Muốn log chi tiết hơn: tạo file văn bản tên `trace.txt` trong thư mục
 YFM Re-Decomp, dòng đầu ghi `frames,window` (hoặc `all`), rồi mở lại app.
+
+## Sao lưu và khôi phục save
+
+Khi xóa app, iOS xóa luôn thư mục Documents của app, kể cả save. Vì vậy:
+
+1. Trong game mở menu **File > Back up saves**. App tạo file
+   `backups/yfm-backup-<ngày>-<giờ>.yfmbak` (gồm save, thiết lập và điều khiển).
+2. Bấm **Save to Files...**: hộp thoại của iOS hiện ra, chọn **iCloud Drive**,
+   **Google Drive** (cần cài sẵn app Google Drive và đã đăng nhập) hoặc một thư
+   mục trên máy, rồi bấm Lưu. Bản sao nằm ở đó và vẫn còn khi bạn xóa app.
+   (Nếu bấm Done, backup chỉ nằm trong app và sẽ mất khi xóa app.)
+3. Sau khi cài lại app: mở game, chọn **File > Restore saves...**, bấm
+   **Files...**, chọn file `.yfmbak` đã lưu, rồi xác nhận. Nếu file còn trong
+   app thì chọn **In the app** để dùng bản trong thư mục backups.
+4. App không tự khởi động lại được: **thoát hẳn app** (vuốt app lên trong màn hình
+   đa nhiệm) rồi mở lại. Save được khôi phục lúc app khởi động và có thông báo.
+   Đừng lưu game trước khi thoát, vì tiến trình đó sẽ bị bản backup ghi đè.
+
+Trước khi khôi phục, app tự lưu lại save hiện tại thành một backup có đuôi
+`-before-restore`, nên có thể hoàn tác bằng cách khôi phục bản đó.

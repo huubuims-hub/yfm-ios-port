@@ -77,6 +77,16 @@
 #include "jni_guard.h" /* last: after SDL's own headers */
 
 static SDL_Window *window;
+
+#ifdef MEMORIES_IOS
+/* ios_files.c: the UIWindow the game draws in, to show the system's file
+ * sheets over. NULL before the window is open. */
+void *Platform_UIKitWindow(void)
+{
+    return window ? SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, NULL)
+                  : NULL;
+}
+#endif
 static SDL_Renderer *renderer;
 static SDL_Texture *picture, *overlay;
 static SDL_GLContext gl_context;
