@@ -261,16 +261,21 @@ def signer(apk, build_tools=None):
     the APK does not verify."""
     build_tools = build_tools or build_tools_dir()
     output = run([tool(build_tools, "apksigner"), "verify", "--verbose", "--print-certs", apk])
-    print("========== APKSIGNER ==========")
-    print(output)
-    print("===============================")
+    # Older build-tools print "Signer #1 certificate DN: ...", newer ones (v2/v3
+    # only APKs) print "V3.0 Signer: certificate DN: ...". Accept both.
+    prefix = re.compile(r"^(?:Signer #\d+|V\d+(?:\.\d+)? Signer):? ")
     fields = {}
     for line in output.splitlines():
         for key, label in (("dn", "certificate DN: "), ("sha256", "certificate SHA-256 digest: ")):
-            if line.startswith("Signer #") and label in line:
+            if prefix.match(line) and label in line:
                 fields.setdefault(key, []).append(line.split(label, 1)[1].strip())
-    if len(fields.get("dn", [])) != 1 or len(fields.get("sha256", [])) != 1:
-        sys.exit(f"{apk}: apksigner verify found {len(fields.get('sha256', []))} signers, not one:\n{output}")
+    # One signer is checked by the "Number of signers" line when present, and
+    # otherwise by the count of certificates. The same signer can be listed
+    # once per signature scheme (v2, v3), so identical certificates count once.
+    m = re.search(r"^Number of signers:\s*(\d+)", output, re.M)
+    count = int(m.group(1)) if m else len(set(fields.get("sha256", [])))
+    if count != 1 or len(set(fields.get("sha256", []))) != 1 or len(set(fields.get("dn", []))) != 1:
+        sys.exit(f"{apk}: apksigner verify found {count} signers, not one:\n{output}")
     return {"dn": fields["dn"][0], "sha256": fields["sha256"][0].lower()}
 
 
