@@ -1,6 +1,5 @@
 #include "recovery.h"
 
-#ifdef MEMORIES_IOS
 #include "paths.h"
 #include "settings.h"
 #include <SDL3/SDL.h>
@@ -8,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "jni_guard.h" /* last: after SDL's own headers */
 
 /* The game counts as started once it has drawn this many frames over this
  * many seconds since the settings were applied. */
@@ -34,9 +34,7 @@ static double first_frame;   /* when the first of them was drawn; 0 before */
 
 static double now(void)
 {
-    struct timespec t;
-    clock_gettime(CLOCK_MONOTONIC, &t);
-    return (double)t.tv_sec + (double)t.tv_nsec / 1e9;
+    return (double)SDL_GetTicksNS() / 1e9;
 }
 
 static void arm(void)
@@ -119,7 +117,7 @@ static int ask(void)
         {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Keep settings (Giữ nguyên)"},
     };
     static const char message[] =
-        "The game did not finish starting last time. It may have hung or been closed by iOS, "
+        "The game did not finish starting last time. It may have hung or been closed by the system, "
         "often because a graphics setting is too demanding for this device.\n\n"
         "Reset the graphics settings to their defaults? Your old settings file is kept as "
         "settings.txt.bak.\n\n"
@@ -142,6 +140,10 @@ void Recovery_AtStart(void)
     FILE *file;
     if (started) return;
     started = 1;
+    /* Automated runs (tests, MEMORIES_HEADLESS) have no one to ask, and may end any way. */
+    if (getenv("MEMORIES_NO_RECOVERY") || (getenv("MEMORIES_HEADLESS") && *getenv("MEMORIES_HEADLESS") &&
+                                           strcmp(getenv("MEMORIES_HEADLESS"), "0")))
+        return;
     if (Paths_User(marker_path, sizeof(marker_path), "startup-check.txt")) {
         marker_path[0] = '\0';
         return;
@@ -169,7 +171,3 @@ void Recovery_Frame(void)
     if (++frames_seen >= STABLE_FRAMES && now() - first_frame >= STABLE_SECONDS) disarm();
 }
 
-#else
-void Recovery_AtStart(void) {}
-void Recovery_Frame(void) {}
-#endif

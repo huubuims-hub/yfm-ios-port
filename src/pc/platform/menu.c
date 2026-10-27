@@ -36,6 +36,13 @@
 #include "pc/debug/monitor.h"
 #include "pc/saves/deck_menu.h"
 #include "pc/text/language.h"
+/* File > Back up saves and Restore saves...: on every system but Windows (the
+ * backup code and the system's file dialogs are POSIX; notes/save-backup.md). */
+#ifndef _WIN32
+#define MEMORIES_SAVE_BACKUP_UI 1
+#include "ios_files.h"
+#include "pc/saves/save_backup.h"
+#endif
 #ifdef _WIN32
 #include "win32.h"
 #else
@@ -99,6 +106,7 @@ enum {
     SLIDER_MASTER, SLIDER_MUSIC, SLIDER_SFX, CHECK_MUTE,
     CHECK_HUD, CHECK_HUD_FULL, RADIO_STATE_SLOT, ACT_UNLOCK_FREE_DUELISTS, ACT_RESET_COLOR,
     ACT_CHECK_UPDATES, ACT_RELEASES, ACT_VERSION, ACT_SET_STARCHIPS, RADIO_LANGUAGE, ACT_SYSTEM_INFO, ACT_JUMP,
+    ACT_BACKUP_SAVES, ACT_RESTORE_SAVES,
     CHECK_TRACE = 300  /* value is a LogChannel */
 };
 
@@ -125,6 +133,17 @@ enum { SUB_SCALE, SUB_MENU_SIZE, SUB_SPEED, SUB_FPS, SUB_CHEATS, SUB_TRACE, SUB_
 #else
 #define VIDEO_ITEMS 14
 #endif
+#ifdef MEMORIES_SAVE_BACKUP_UI
+/* File > Back up saves and Restore saves (pc/saves/save_backup.h): the saves
+ * go with the app when it is deleted, so a copy can be made and put back. */
+#define FILE_ITEMS 12
+#define FILE_BACKUP_ITEMS                                                         \
+    {"Back up saves", 0, ITEM_ACTION, ACT_BACKUP_SAVES, -1, 0, ITEM_GROUP_BREAK}, \
+    {"Restore saves...", 0, ITEM_ACTION, ACT_RESTORE_SAVES, -1},
+#else
+#define FILE_ITEMS 10
+#define FILE_BACKUP_ITEMS
+#endif
 static Menu menus[MENU_COUNT] = {
     {"File", {{"Save state", "F5", ITEM_ACTION, ACT_SAVE_STATE, -1},
               {"Load state", "F7", ITEM_ACTION, ACT_LOAD_STATE, -1},
@@ -134,8 +153,9 @@ static Menu menus[MENU_COUNT] = {
               {"State slot 4", 0, ITEM_RADIO, RADIO_STATE_SLOT, -1, 4},
               {"Screenshot", "F12", ITEM_ACTION, ACT_SCREENSHOT, -1, 0, ITEM_GROUP_BREAK},
               {"Reload settings", 0, ITEM_ACTION, ACT_RELOAD_SETTINGS, -1},
+              FILE_BACKUP_ITEMS
               {"Confirm before quitting", 0, ITEM_CHECK, 0, SET_CONFIRM_QUIT, 0, ITEM_GROUP_BREAK},
-              {"Exit", "Esc", ITEM_ACTION, ACT_EXIT, -1}}, 10},
+              {"Exit", "Esc", ITEM_ACTION, ACT_EXIT, -1}}, FILE_ITEMS},
     {"Video", {{"Window scale", 0, ITEM_SUBMENU, 0, -1, SUB_SCALE},
               {"Menu size", 0, ITEM_SUBMENU, 0, -1, SUB_MENU_SIZE},
               {"Fullscreen", "F11", ITEM_CHECK, MENU_ITEM_FULLSCREEN, SET_FULLSCREEN, 0, ITEM_GROUP_BREAK},
@@ -904,6 +924,183 @@ static void choose_language(int language)
     Menu_ShowNotice("Language", text, buttons, 3, 0, language_chosen);
 }
 
+#ifdef MEMORIES_SAVE_BACKUP_UI
+/* File > Back up saves / Restore saves... The backup is made in the app's
+ * Documents (the Files app shows it there) and can then be saved through the
+ * system's picker to iCloud Drive, Google Drive or anywhere else, which is
+ * what outlives the app; Restore takes one from the app's folder or from
+ * there (platform/ios_files.h). */
+static SaveBackupInfo restore_choice[3];
+static int restore_choices, restore_picked;
+static char made_backup[SAVE_BACKUP_NAME];
+enum { FILES_NONE, FILES_SAVE, FILES_OPEN };
+static int files_task; /* what the picker is up for */
+
+static void show_ok(const char *title, const char *text)
+{
+    static const char *const ok[] = {"OK"};
+    Menu_ShowNotice(title, text, ok, 1, 0, NULL);
+}
+
+static void restore_confirmed(int button, int *quit)
+{
+    char why[300], text[500];
+    (void)quit;
+    if (button != 0) return;
+    if (SaveBackup_Stage(Paths_UserDir(), restore_choice[restore_picked].name, why, sizeof(why))) {
+        snprintf(text, sizeof(text), "The saves were not restored. %s", why);
+        show_ok("Restore saves", text);
+        return;
+    }
+    show_ok("Restore saves",
+            "Ready. Close the game completely (on a phone, swipe it away in the recent apps) and open it again: "
+            "the saves are restored as it starts. Do not save the game before that, or that progress is replaced.");
+}
+
+static void restore_chosen(int button, int *quit)
+{
+    static const char *const buttons[] = {"Restore", "Cancel"};
+    char text[500];
+    (void)quit;
+    if (button < 0 || button >= restore_choices) return;
+    restore_picked = button;
+    snprintf(text, sizeof(text),
+             "Restore the saves from %.24s?\n\nYour saves as they are now are kept in a backup first. The restore "
+             "is done when the app starts again, so you will be asked to close it.",
+             restore_choice[button].shown);
+    Menu_ShowNotice("Restore saves", text, buttons, 2, 1, restore_confirmed);
+}
+
+/* The backups in the app's own folder, newest three. */
+static void restore_from_app(void)
+{
+    static const char *const buttons[] = {"1", "2", "3", "Cancel"};
+    SaveBackupInfo found[3];
+    char text[500];
+    int i, n = SaveBackup_List(Paths_UserDir(), found, 3), used;
+    if (n == 0) {
+        show_ok("Restore saves", "There is no backup in the app. Choose Restore saves again and pick \"Files...\" to "
+                                 "take one from iCloud Drive or another place.");
+        return;
+    }
+    used = snprintf(text, sizeof(text), "Choose the backup to restore (newest first):\n");
+    for (i = 0; i < n && used < (int)sizeof(text); i++) {
+        restore_choice[i] = found[i];
+        used += snprintf(text + used, sizeof(text) - (size_t)used, "\n%d) %s, %lld KB", i + 1, found[i].shown,
+                         (found[i].size + 1023) / 1024);
+    }
+    restore_choices = n;
+    {
+        const char *labels[4];
+        for (i = 0; i < n; i++) labels[i] = buttons[i];
+        labels[n] = buttons[3];
+        Menu_ShowNotice("Restore saves", text, labels, n + 1, 0, restore_chosen);
+    }
+}
+
+static void restore_source_chosen(int button, int *quit)
+{
+    (void)quit;
+    if (button == 0) {
+        restore_from_app();
+    } else if (button == 1) {
+        if (IosFiles_Open() == 0) {
+            files_task = FILES_OPEN;
+        } else {
+            char text[400];
+            snprintf(text, sizeof(text), "The Files picker could not be shown. %s", IosFiles_Error());
+            show_ok("Restore saves", text);
+        }
+    }
+}
+
+static void restore_saves(void)
+{
+    static const char *const buttons[] = {"In the app", "Files...", "Cancel"};
+    char text[500];
+    SaveBackupInfo found[1];
+    int n = SaveBackup_List(Paths_UserDir(), found, 1);
+    snprintf(text, sizeof(text),
+             "Restore the saves from a backup.\n\n\"In the app\" lists the backups in this app's folder (%s). "
+             "\"Files...\" opens iCloud Drive, Google Drive or another place, to pick a .yfmbak file you saved.",
+             n ? "some found" : "none found");
+    Menu_ShowNotice("Restore saves", text, buttons, 3, n ? 0 : 1, restore_source_chosen);
+}
+
+static void backup_made_chosen(int button, int *quit)
+{
+    char path[1100];
+    (void)quit;
+    if (button != 0) return;
+    if (snprintf(path, sizeof(path), "%s/backups/%s", Paths_UserDir(), made_backup) >= (int)sizeof(path) ||
+        IosFiles_Save(path) != 0) {
+        char text[500];
+        snprintf(text, sizeof(text), "The Files picker could not be shown. %s\n\nThe backup is in the app's backups "
+                 "folder.", IosFiles_Error());
+        show_ok("Back up saves", text);
+        return;
+    }
+    files_task = FILES_SAVE;
+}
+
+static void back_up_saves(void)
+{
+    static const char *const buttons[] = {"Save to Files...", "Done"};
+    char why[300], text[500];
+    int files = 0;
+    if (SaveBackup_Create(Paths_UserDir(), NULL, made_backup, sizeof(made_backup), &files, why, sizeof(why))) {
+        snprintf(text, sizeof(text), "The backup could not be made. %s", why);
+        show_ok("Back up saves", text);
+        return;
+    }
+    snprintf(text, sizeof(text),
+             "Made backups/%.80s (%d files) in the app.\n\nDeleting the app deletes it too. \"Save to Files...\" puts "
+             "a copy in iCloud Drive, Google Drive or another place you choose, where it stays.",
+             made_backup, files);
+    Menu_ShowNotice("Back up saves", text, buttons, 2, 0, backup_made_chosen);
+}
+
+/* Once a frame: the outcome of the picker, when it is over. */
+static void poll_files(void)
+{
+    IosFilesState state;
+    int task = files_task;
+    char why[300], text[500];
+    SaveBackupInfo info;
+    if (task == FILES_NONE) return;
+    state = IosFiles_State();
+    if (state == IOS_FILES_BUSY || state == IOS_FILES_IDLE) return;
+    files_task = FILES_NONE;
+    if (state == IOS_FILES_FAILED) {
+        snprintf(text, sizeof(text), "The Files picker failed. %s", IosFiles_Error());
+        show_ok(task == FILES_SAVE ? "Back up saves" : "Restore saves", text);
+    } else if (state == IOS_FILES_CANCELLED) {
+        if (task == FILES_SAVE)
+            show_ok("Back up saves", "Not saved to Files. The backup is only in the app's backups folder, so it goes "
+                                     "if you delete the app.");
+    } else if (task == FILES_SAVE) {
+        show_ok("Back up saves", "Saved where you chose. That copy stays when the app is deleted: choose Restore saves "
+                                 "> Files... to use it.");
+    } else if (SaveBackup_Import(Paths_UserDir(), IosFiles_Path(), &info, why, sizeof(why))) {
+        snprintf(text, sizeof(text), "That file cannot be used. %s", why);
+        show_ok("Restore saves", text);
+    } else {
+        remove(IosFiles_Path()); /* the system's temporary copy */
+        restore_choice[0] = info;
+        restore_choices = 1;
+        restore_chosen(0, NULL);
+    }
+    IosFiles_Done();
+}
+
+/* The report of a restore done as the app started. */
+static void show_restore_result(void)
+{
+    char text[500];
+    if (SaveBackup_TakeResult(Paths_UserDir(), text, sizeof(text))) show_ok("Restore saves", text);
+}
+#endif
+
 void Menu_Init(void)
 {
     int i;
@@ -915,6 +1112,9 @@ void Menu_Init(void)
     update_hd_items(); /* until the backend says its picture pass is on */
     update_language_items();
     ready = 1;
+#ifdef MEMORIES_SAVE_BACKUP_UI
+    show_restore_result();
+#endif
 }
 
 void Menu_SetItemEnabled(int id, int enabled)
@@ -1514,6 +1714,9 @@ static void tell_settings_error(void)
 int Menu_TakeChanged(void)
 {
     int was;
+#ifdef MEMORIES_SAVE_BACKUP_UI
+    poll_files();
+#endif
     tell_settings_error();
     was = changed;
     changed = 0;
@@ -1909,6 +2112,10 @@ static void activate(const Item *item, int *quit)
     }
     case MENU_ITEM_RESTART: TitleJump_Confirm(); break;
     case MENU_ITEM_DECKS: DeckMenu_Request(); break;
+#ifdef MEMORIES_SAVE_BACKUP_UI
+    case ACT_BACKUP_SAVES: back_up_saves(); break;
+    case ACT_RESTORE_SAVES: restore_saves(); break;
+#endif
     case ACT_RELOAD_SETTINGS:
         Menu_LoadSettings();
         Platform_ApplyDisplaySettings();

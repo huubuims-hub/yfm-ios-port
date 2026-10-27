@@ -1,0 +1,91 @@
+# Android (arm64): builds the translated game with the NDK and packs a signed
+# APK to install on a phone. It never needs a disc or a secret; with the three
+# ANDROID_* secrets below it signs with your own key, so later builds install
+# over earlier ones. Every step's log is uploaded, pass or fail.
+# How to use it: docs/HUONG_DAN_ANDROID.md.
+name: Android build (experimental)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  android:
+    name: android-arm64-v8a (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Optional: a release key as repository secrets (Settings > Secrets and
+      # variables > Actions): ANDROID_KEYSTORE_BASE64 (the .p12 or .jks file,
+      # base64), ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS (default: yfm).
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK and NDK
+        run: |
+          mkdir -p tmp/android-logs
+          export ANDROID_SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKM="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" --install "platforms;android-35" "build-tools;35.0.0" 2>&1 | tail -5
+          # The newest NDK 29 (r29 is the one tested); else the runner's own.
+          NDK=$("$SDKM" --list 2>/dev/null | grep -o 'ndk;29\.[0-9.]*' | sort -uV | tail -1 || true)
+          if [ -n "$NDK" ]; then "$SDKM" --install "$NDK" 2>&1 | tail -3; fi
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          { echo "sdk: $ANDROID_SDK_ROOT"; echo "ndk wanted: ${NDK:-none found, the runner's}"; ls "$ANDROID_SDK_ROOT/ndk"; java -version; cmake --version | head -1; } 2>&1 | tee tmp/android-logs/toolchain.txt
+      - name: Build tools (ninja)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build
+      - name: Cache the debug signing key
+        if: env.HAS_KEY != 'true'
+        uses: actions/cache@v4
+        with:
+          path: tmp/pc/android-deps/debug.keystore
+          key: android-debug-keystore-v1
+      - name: Release key from secrets
+        if: env.HAS_KEY == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/android-release.p12"
+          echo "MEMORIES_ANDROID_KEYSTORE=$RUNNER_TEMP/android-release.p12" >> "$GITHUB_ENV"
+          echo "MEMORIES_ANDROID_KEYSTORE_PASSWORD=$STORE_PASS" >> "$GITHUB_ENV"
+          if [ -n "$KEY_ALIAS" ]; then echo "MEMORIES_ANDROID_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"; fi
+      - name: Build the APK
+        id: build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python3 tools/pc/build_game32.py --target android-arm64-v8a --release 2>&1 | tee tmp/android-logs/build.log
+      - name: Collect the APK
+        if: steps.build.outcome == 'success'
+        run: |
+          mkdir -p out
+          find tmp/pc -name 'memories-*.apk' -exec cp {} out/ \;
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        if: steps.build.outcome == 'success'
+        with:
+          name: yfm-android-apk
+          path: out/*.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-build-logs
+          path: tmp/android-logs
+      - name: Fail when the build failed
+        if: steps.build.outcome != 'success'
+        run: exit 1

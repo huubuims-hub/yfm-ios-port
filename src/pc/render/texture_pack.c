@@ -2080,8 +2080,8 @@ void TexturePack_ReadStats(unsigned *images, unsigned *us, unsigned *max_us)
  *    after the sheet came up, a duel field's bands 10 frames. A read ahead
  *    is no entry's until the game asks for it, so it changes nothing drawn;
  *    those no entry has yet are kept up to decode_ahead_limit (192 MB, 96
- *    on Android, 48 in a 32-bit game; MEMORIES_PACK_READ_AHEAD), the oldest
- *    dropped first;
+ *    on Android, 48 in a 32-bit game, a 64th of an iPhone's RAM: 32 MB on a
+ *    2 GB one; MEMORIES_PACK_READ_AHEAD), the oldest dropped first;
  *  - entries of one PNG and one geometry (the card frames' are named by ten
  *    entries, one per screen) share its image and texels, read once.
  * Uploads and primitives (paint, prepare) only set `wanted`, as before: they
@@ -2219,6 +2219,47 @@ static void *decode_thread(void *unused)
     return NULL;
 }
 
+#ifdef MEMORIES_IOS
+#include <sys/sysctl.h>
+/* The read-ahead for the phone's memory: a 64th of its RAM, never under
+ * 16 MB or over the PC's 192 MB. That is 32 MB on a 2 GB iPhone 6s (it has
+ * no more than about 1.4 GB for the app, and the images the game is using
+ * come on top of this), 48 MB on 3 GB, 64 MB on 4 GB, 96 MB on 6 GB (Android's
+ * figure) and 128 MB on 8 GB. It limits only what is read ahead, not the
+ * images the game asks for. */
+static size_t ios_read_ahead_limit(void)
+{
+    unsigned long long ram = 0;
+    size_t length = sizeof(ram), limit;
+    if (sysctlbyname("hw.memsize", &ram, &length, NULL, 0) || !ram) return (size_t)32 << 20; /* unknown: small */
+    limit = (size_t)(ram >> 6);
+    if (limit < ((size_t)16 << 20)) limit = (size_t)16 << 20;
+    if (limit > ((size_t)192 << 20)) limit = (size_t)192 << 20;
+    fprintf(stderr, "memories-pc: texture pack: read-ahead limit %u MB for %llu MB of RAM\n",
+            (unsigned)(limit >> 20), ram >> 20);
+    return limit;
+}
+#endif
+
+/* The system warned that memory is short (iOS): what was read ahead and no
+ * entry has yet is let go, and a quarter of the limit is all that is read
+ * ahead from now on (none after a second warning, the game reading what it
+ * asks for when it asks). */
+void TexturePack_LowMemory(void)
+{
+    Decode *at, *next;
+    pthread_mutex_lock(&decode_lock);
+    decode_ahead_limit /= 4;
+    for (at = decodes; at; at = next) {
+        next = at->next;
+        if (at->ahead && !at->now && at->state == DECODE_DONE) {
+            decode_unlink(at);
+            decode_free(at);
+        }
+    }
+    pthread_mutex_unlock(&decode_lock);
+}
+
 /* The threads, the first time a pack's image is wanted. MEMORIES_PACK_READ_AHEAD
  * (megabytes, 0 none) sets how much may be read ahead; read here, on the
  * main thread. None started: the main thread reads all a Service wants. */
@@ -2236,6 +2277,8 @@ static void decode_start(void)
      * are partly read again, 34 ms instead of 22 on Windows). */
 #ifdef __ANDROID__
     decode_ahead_limit = sizeof(void *) > 4 ? (size_t)96 << 20 : (size_t)48 << 20;
+#elif defined(MEMORIES_IOS)
+    decode_ahead_limit = ios_read_ahead_limit();
 #else
     decode_ahead_limit = sizeof(void *) > 4 ? (size_t)192 << 20 : (size_t)48 << 20;
 #endif

@@ -21,10 +21,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "pc/saves/save_backup.h"
 #ifdef MEMORIES_IOS
 /* iOS (notes/ios-port.md): SDL owns UIApplicationMain and calls this file's
  * main (renamed SDL_main) on the app's main thread. */
 #include <SDL3/SDL_main.h>
+#include "pc/platform/ios_log.h"
 #endif
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
@@ -204,6 +206,15 @@ int main(int argc, char **argv)
     /* An iOS app cannot fork/exec itself, so the crash monitor's child
      * process (debug/monitor.c) is not available. */
     setenv("MEMORIES_NO_MONITOR", "1", 0);
+    /* Without a Mac there is no console: the output goes to a file the Files
+     * app shows (platform/ios_log.h). */
+    IosLog_Start();
+    /* A restore of the saves chosen in the last run is done now, before
+     * anything reads them (pc/saves/save_backup.h). */
+    {
+        char report[500];
+        if (SaveBackup_ApplyPending(Paths_UserDir(), report, sizeof(report))) IosLog_Note("%s", report);
+    }
 #endif
     const char *exe = argc > 1 ? argv[1] : NULL;
     launch_argv = argv;
@@ -222,6 +233,15 @@ int main(int argc, char **argv)
         if (Monitor_Main(argc, argv, &status)) return status;
     }
     Log_Init();
+#if !defined(_WIN32) && !defined(MEMORIES_IOS)
+    /* A restore of the saves chosen in the last run is done now, before
+     * anything reads them (pc/saves/save_backup.h; iOS does it above). */
+    {
+        char report[500];
+        if (SaveBackup_ApplyPending(Paths_UserDir(), report, sizeof(report)))
+            fprintf(stderr, "memories-pc: %s\n", report);
+    }
+#endif
     Symbols_Load();
     Mods_SetFunctionNames(Symbols_Lookup);   /* the functions code mods hook, in the Mods window */
     Crash_Init();

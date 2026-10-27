@@ -57,6 +57,7 @@
 #define SDL_RumbleGamepad(...) MEMORIES_JNI(SDL_RumbleGamepad, __VA_ARGS__)
 #define SDL_OpenAudioDeviceStream(...) MEMORIES_JNI(SDL_OpenAudioDeviceStream, __VA_ARGS__)
 #define SDL_ShowOpenFileDialog(...) MEMORIES_JNI(SDL_ShowOpenFileDialog, __VA_ARGS__)
+#define SDL_ShowSaveFileDialog(...) MEMORIES_JNI(SDL_ShowSaveFileDialog, __VA_ARGS__)
 #define SDL_GetAndroidInternalStoragePath(...) MEMORIES_JNI(SDL_GetAndroidInternalStoragePath, __VA_ARGS__)
 #define SDL_GetAndroidExternalStoragePath(...) MEMORIES_JNI(SDL_GetAndroidExternalStoragePath, __VA_ARGS__)
 #define SDL_GetAndroidCachePath(...) MEMORIES_JNI(SDL_GetAndroidCachePath, __VA_ARGS__)

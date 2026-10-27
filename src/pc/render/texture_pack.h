@@ -43,6 +43,9 @@ void TexturePack_Service(void);
  * waits for), the microseconds that took in all, and the longest one
  * service took; then counts again from 0. For MEMORIES_TRACE=frames (sdl.c). */
 void TexturePack_ReadStats(unsigned *images, unsigned *us, unsigned *max_us);
+/* The system warned that memory is short (iOS): what is read ahead is let go
+ * and read ahead less from now on. */
+void TexturePack_LowMemory(void);
 /* The pack's images are read on other threads (texture_pack.c, Decode),
  * and still given before the next frame to what asked for them. How many
  * Services gave an image read for them then, read ahead, or already read

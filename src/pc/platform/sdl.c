@@ -36,6 +36,9 @@
 #include "save_icon.h"
 #include "touch_pad.h"
 #include "touch_pad_art.h"
+#ifdef MEMORIES_IOS
+#include "ios_log.h"
+#endif
 #include <SDL3/SDL.h>
 /* Android: SDL reaches Java (JNI) for events and joysticks, message boxes,
  * the clipboard, URLs, the cursor, the window's mode and audio devices,
@@ -74,6 +77,16 @@
 #include "jni_guard.h" /* last: after SDL's own headers */
 
 static SDL_Window *window;
+
+#ifdef MEMORIES_IOS
+/* ios_files.c: the UIWindow the game draws in, to show the system's file
+ * sheets over. NULL before the window is open. */
+void *Platform_UIKitWindow(void)
+{
+    return window ? SDL_GetPointerProperty(SDL_GetWindowProperties(window), SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, NULL)
+                  : NULL;
+}
+#endif
 static SDL_Renderer *renderer;
 static SDL_Texture *picture, *overlay;
 static SDL_GLContext gl_context;
@@ -197,6 +210,15 @@ static void update_menu_scale(int window_h)
         Menu_SetTouchTarget((int)(48.0f * density + 0.5f));
         if (TouchPad_SetDensity(density)) menu_dirty = 1;
     }
+#ifdef MEMORIES_IOS
+    /* The window is in points here, one to the dp, so the touch controls
+     * take 48 to 80 of them (at most 64 on a tablet, where they sit over a
+     * picture that fills the screen) instead of 13% of the short side, which
+     * made an iPad's buttons huge. The menu keeps its own scale: only the
+     * pad uses the density. */
+    if (TouchPad_SetTabletLimit(64)) menu_dirty = 1;
+    if (TouchPad_SetDensity(1.0f)) menu_dirty = 1;
+#endif
     Menu_SetScale(wanted ? wanted : Menu_AutoScale(window_h));
 }
 
@@ -1909,7 +1931,21 @@ static bool SDLCALL app_event(void *userdata, SDL_Event *event)
 {
     (void)userdata;
     switch (event->type) {
+#ifdef MEMORIES_IOS
+    /* The system's own warnings, in the log file (ios_log.h): the last lines
+     * before a kill tell whether it was memory. */
+    case SDL_EVENT_LOW_MEMORY:
+        IosLog_Note("the system warned about low memory");
+        TexturePack_LowMemory();
+        break;
+    case SDL_EVENT_TERMINATING:
+        IosLog_Note("the system is ending the app");
+        break;
+#endif
     case SDL_EVENT_WILL_ENTER_BACKGROUND: case SDL_EVENT_DID_ENTER_BACKGROUND:
+#ifdef MEMORIES_IOS
+        if (!background_paused) IosLog_Note("app goes to the background");
+#endif
         if (!background_paused) {
             background_paused = 1;
             background_clock_rate = Platform_ClockRate();
@@ -1919,6 +1955,9 @@ static bool SDLCALL app_event(void *userdata, SDL_Event *event)
         }
         break;
     case SDL_EVENT_DID_ENTER_FOREGROUND:
+#ifdef MEMORIES_IOS
+        if (background_paused) IosLog_Note("app is back in the foreground");
+#endif
         if (background_paused) {
             background_paused = 0;
             if (background_clock_rate && Platform_ClockRate() == 0) Platform_SetClockRate(background_clock_rate);
