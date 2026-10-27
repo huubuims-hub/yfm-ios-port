@@ -261,6 +261,9 @@ def signer(apk, build_tools=None):
     the APK does not verify."""
     build_tools = build_tools or build_tools_dir()
     output = run([tool(build_tools, "apksigner"), "verify", "--verbose", "--print-certs", apk])
+    print("========== APKSIGNER ==========")
+    print(output)
+    print("===============================")
     fields = {}
     for line in output.splitlines():
         for key, label in (("dn", "certificate DN: "), ("sha256", "certificate SHA-256 digest: ")):
