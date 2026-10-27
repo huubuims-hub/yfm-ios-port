@@ -39,11 +39,16 @@ jobs:
           SDKM="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKM" --licenses > /dev/null || true
           "$SDKM" --install "platforms;android-35" "build-tools;35.0.0" 2>&1 | tail -5
-          # The newest NDK 29 (r29 is the one tested); else the runner's own.
+          # The newest NDK 29 (r29 is the one tested); else the NDK of the runner.
           NDK=$("$SDKM" --list 2>/dev/null | grep -o 'ndk;29\.[0-9.]*' | sort -uV | tail -1 || true)
-          if [ -n "$NDK" ]; then "$SDKM" --install "$NDK" 2>&1 | tail -3; fi
+          if [ -n "$NDK" ]; then
+            "$SDKM" --install "$NDK" 2>&1 | tail -3
+            # The runner sets its own (older) NDK in these; the build takes the one named here.
+            echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/${NDK#ndk;}" >> "$GITHUB_ENV"
+            echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/${NDK#ndk;}" >> "$GITHUB_ENV"
+          fi
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
-          { echo "sdk: $ANDROID_SDK_ROOT"; echo "ndk wanted: ${NDK:-none found, the runner's}"; ls "$ANDROID_SDK_ROOT/ndk"; java -version; cmake --version | head -1; } 2>&1 | tee tmp/android-logs/toolchain.txt
+          { echo "sdk: $ANDROID_SDK_ROOT"; echo "ndk wanted: ${NDK:-none found, using the NDK of the runner}"; ls "$ANDROID_SDK_ROOT/ndk" || true; java -version; cmake --version | head -1 || true; } 2>&1 | tee tmp/android-logs/toolchain.txt
       - name: Build tools (ninja)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build
       - name: Cache the debug signing key
