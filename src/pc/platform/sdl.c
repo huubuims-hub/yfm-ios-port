@@ -214,10 +214,17 @@ static void update_menu_scale(int window_h)
     /* The window is in points here, one to the dp, so the touch controls
      * take 48 to 80 of them (at most 64 on a tablet, where they sit over a
      * picture that fills the screen) instead of 13% of the short side, which
-     * made an iPad's buttons huge. The menu keeps its own scale: only the
-     * pad uses the density. */
+     * made an iPad's buttons huge. The menu keeps its own text scale. The
+     * screen is touched, so the menus and the panels (Mods, Controls) take
+     * their touch layout as on Android: rows and buttons a finger's target
+     * (48 points) tall, bigger sliders and scrollbars, and on a phone the
+     * Mods window as two pages (the list, then the selected mod's settings)
+     * that a drag scrolls. Without it they had the mouse layout, whose small
+     * rows and sliders took every drag that began on them, so the settings of a mod with
+     * many options (3D Monsters) could not be scrolled on an iPhone. */
     if (TouchPad_SetTabletLimit(64)) menu_dirty = 1;
     if (TouchPad_SetDensity(1.0f)) menu_dirty = 1;
+    Menu_SetTouchTarget(48);
 #endif
     Menu_SetScale(wanted ? wanted : Menu_AutoScale(window_h));
 }
