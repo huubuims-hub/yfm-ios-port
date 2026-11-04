@@ -469,6 +469,7 @@ static int panel_overlay(void)
  * safe area; down, the whole height, since the system bars it also leaves
  * out are hidden over the game (a fullscreen, immersive window) and a
  * landscape phone's cutout is at a side. */
+static int portrait_layout(int window_w, int window_h);
 static void layout_panel(void)
 {
     SDL_Rect safe;
@@ -479,7 +480,12 @@ static void layout_panel(void)
             LOG(LOG_WINDOW, "panel: safe area %d,%d %dx%d of %dx%d", safe.x, safe.y, safe.w, safe.h, layout.win_w,
                 layout.win_h);
         }
-        Panel_Layout(layout.win_w, layout.win_h, safe.x, 0, safe.w, layout.win_h);
+        /* Held upright the cutout is at the top and the home indicator at
+         * the bottom, so the panel keeps inside the safe area both ways. */
+        if (portrait_layout(layout.win_w, layout.win_h))
+            Panel_Layout(layout.win_w, layout.win_h, safe.x, safe.y, safe.w, safe.h);
+        else
+            Panel_Layout(layout.win_w, layout.win_h, safe.x, 0, safe.w, layout.win_h);
     } else
         Panel_Layout(layout.win_w, layout.win_h, 0, 0, layout.win_w, layout.win_h);
 }
@@ -1270,10 +1276,26 @@ int HERE(Platform_StartAudio)(void (*mix)(int16_t *, size_t))
 
 /* --- window ----------------------------------------------------------- */
 
+/* A phone held upright shows the picture across the top and the touch
+ * controls under it. Only iOS turns to portrait (Android keeps the game
+ * landscape, android.c); a tall window on a desktop keeps the picture
+ * centred. */
+static int portrait_layout(int window_w, int window_h)
+{
+#ifdef MEMORIES_IOS
+    return window_h > window_w;
+#else
+    (void)window_w;
+    (void)window_h;
+    return 0;
+#endif
+}
+
 static void relayout(void)
 {
     static int logged_window_w, logged_window_h, logged_output_w, logged_output_h;
     int output_w, output_h, window_w, window_h, menu;
+    int safe_top = 0, safe_bottom = 0, portrait;
     int aspect = Settings_Get(SET_ASPECT);
     /* Widescreen pictures arrive 4/3 as wide as the 4:3 ones (libgpu.c), so
      * both keep the same pixel shape; the frame's size in game pixels is
@@ -1293,11 +1315,18 @@ static void relayout(void)
     if (Settings_Get(SET_SAFE_AREA)) {
         /* Clear of a notch or the Dynamic Island: across, the safe area (the
          * part of the window the system says is not covered); down, the
-         * whole height, as layout_panel() does. */
+         * whole height in landscape, as layout_panel() does (a landscape
+         * phone's cutout is at a side). Held upright the cutout is at the
+         * top and the home indicator at the bottom: portrait_layout()
+         * below keeps the picture and the pad clear of them. */
         SDL_Rect safe;
         if (window && SDL_GetWindowSafeArea(window, &safe) && safe.w > 0 && safe.x >= 0 && safe.x + safe.w <= window_w) {
             area_x = safe.x;
             area_w = safe.w;
+            if (safe.y >= 0 && safe.h > 0 && safe.y + safe.h <= window_h) {
+                safe_top = safe.y;
+                safe_bottom = window_h - (safe.y + safe.h);
+            }
         }
     }
     update_menu_scale(window_h);
@@ -1306,7 +1335,22 @@ static void relayout(void)
     if (area_h < 1) area_h = 1;
     layout.win_w = window_w;
     layout.win_h = window_h;
+    portrait = portrait_layout(window_w, window_h);
+    if (portrait) {
+        /* A phone held upright: the 4:3 picture as wide as the screen,
+         * across the top under the cutout, and the touch controls below
+         * it (touch_pad.c, TouchPad_SetPortrait). A stretched picture
+         * (Scaling) would be a tall sliver here, so it is fitted instead;
+         * integer scaling stays integer. */
+        float fit = mode == 0 ? (float)SDL_max(1, area_w / pw) : (float)area_w / (float)pw;
+        layout.dst.w = (float)pw * fit;
+        layout.dst.h = (float)ph * fit;
+        layout.dst.x = (float)area_x + ((float)area_w - layout.dst.w) * 0.5f;
+        layout.dst.y = (float)(menu + safe_top);
+    }
     if (TouchPad_SetInsets(area_x, window_w - area_x - area_w)) menu_dirty = 1;
+    if (TouchPad_SetPortrait(portrait ? (int)(layout.dst.y + layout.dst.h + 0.5f) : 0, portrait ? safe_bottom : 0))
+        menu_dirty = 1;
     if (TouchPad_Layout(window_w, window_h, menu)) menu_dirty = 1;
     if (Panel_Shown()) layout_panel();
     layout.pixel_x = (float)output_w / (float)window_w;
@@ -1318,7 +1362,9 @@ static void relayout(void)
         logged_window_w = window_w; logged_window_h = window_h;
         logged_output_w = output_w; logged_output_h = output_h;
     }
-    if (mode == 2) {
+    if (portrait) {
+        /* placed above */
+    } else if (mode == 2) {
         layout.dst.x = (float)area_x;
         layout.dst.y = (float)menu;
         layout.dst.w = (float)area_w;
@@ -2561,6 +2607,12 @@ int Platform_Open(const char *title)
         return -1;
     }
     SDL_AddEventWatch(app_event, NULL);
+#ifdef MEMORIES_IOS
+    /* Both landscapes and upright (the picture on top, the controls below
+     * it, relayout()). Whether the phone turns is the system's: the
+     * rotation lock in the Control Center. Info.plist lists the same. */
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight Portrait PortraitUpsideDown");
+#endif
     create_window(title);
     /* A software GL renderer cannot present a scaled 4K frame in the 4 ms a
      * 400% game frame allows. The 32-bit build on an NVIDIA Wayland desktop

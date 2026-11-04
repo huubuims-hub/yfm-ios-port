@@ -40,6 +40,11 @@ int TouchPad_SetTabletLimit(int most_dp);
  * the Dynamic Island, rounded corners: the safe area, SET_SAFE_AREA). 1 when
  * the layout changed. */
 int TouchPad_SetInsets(int left, int right);
+/* A window taller than it is wide (a phone held upright): the picture is
+ * across the top and ends at `controls_top`, and the pad takes the rest
+ * above `bottom_inset` (the home indicator's space) in a layout of its own.
+ * 0 for controls_top gives the landscape layout. 1 when the layout changed. */
+int TouchPad_SetPortrait(int controls_top, int bottom_inset);
 /* Window pixels per density-independent pixel (Android's dp; 0 when the
  * system does not say): with it, a button is a thumb's width on any screen,
  * 48 to 80 dp, rather than a share of the window. 1 when the layout

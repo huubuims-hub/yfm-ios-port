@@ -132,10 +132,20 @@ def package(binary, out, label):
         MinimumOSVersion=IOS_MINIMUM,
         UIDeviceFamily=[1, 2],
         UIRequiredDeviceCapabilities=["arm64"],
+        # Both landscapes and upright: the picture on top, the controls under
+        # it (sdl.c relayout). The phone turns as the system's rotation lock
+        # allows. An iPhone never shows upside down; an iPad may.
         UISupportedInterfaceOrientations=[
             "UIInterfaceOrientationLandscapeLeft",
             "UIInterfaceOrientationLandscapeRight",
+            "UIInterfaceOrientationPortrait",
         ],
+        **{"UISupportedInterfaceOrientations~ipad": [
+            "UIInterfaceOrientationLandscapeLeft",
+            "UIInterfaceOrientationLandscapeRight",
+            "UIInterfaceOrientationPortrait",
+            "UIInterfaceOrientationPortraitUpsideDown",
+        ]},
         UIRequiresFullScreen=True,
         UIStatusBarHidden=True,
         UIViewControllerBasedStatusBarAppearance=False,

@@ -30,6 +30,10 @@ stage 2 has to fix.
 | `tools/pc/ios_assets/` (+ `package_ios.py` `install_icons`) | The app icon ("YFM1" / "iOSRecompile", violet synthwave): a 1024 px master, the sizes an iPhone and an iPad ask for, and the script that drew it. The app has no asset catalog, so the PNGs sit in the bundle root and Info.plist lists them (`CFBundleIcons`, `CFBundleIconFiles`). The packaging fails if the 60x60 icons are missing. Untested on a device: if the home screen still shows a blank icon, reinstall the app (iOS caches icons), and tell us. |
 | `.github/workflows/ios-build.yml` | Manual workflow, stages `deps-only` / `compile-only` / `full`; uploads every log. |
 
+## Screen rotation (portrait)
+
+Info.plist and `SDL_HINT_ORIENTATIONS` (sdl.c) now allow upright as well as both landscapes (an iPad also upside down). Whether the phone turns is the system's rotation lock (Control Center), as in any iOS app. Upright (`portrait_layout()`, `relayout()` in sdl.c) the 4:3 picture is as wide as the safe area and sits under the cutout; `TouchPad_SetPortrait` (touch_pad.c) lays the controller out in the space below it: shoulders and MENU in a row under the picture, D-pad and face buttons at the two sides, SELECT and START side by side at the bottom above the home indicator. Scaling "Stretch" is fitted instead in this orientation. Panels (Mods, Controls) stay inside the safe area both ways. The landscape layout is unchanged (checked with a harness that compares the rectangles before and after). Not done: the menu bar, when shown, is drawn from the top edge of the window, under the cutout. Untested on a device.
+
 ## Mods and the HD pack on iOS
 
 * The bundled code mods (3D Monsters, Hand Camera, AI Hard Mode, Yamyi Mods)
